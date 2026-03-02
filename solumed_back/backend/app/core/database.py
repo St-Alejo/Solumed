@@ -33,6 +33,7 @@ def _get_conn_sqlite():
 
 def _get_conn_postgres():
     import psycopg2
+    import psycopg2.extras
     con = psycopg2.connect(settings.DATABASE_URL)
     con.autocommit = False
     return con
