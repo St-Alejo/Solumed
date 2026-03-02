@@ -1,0 +1,239 @@
+@import "tailwindcss";
+
+/* ── Tokens de diseño ─────────────────────────────────── */
+:root {
+  --bg:       #f0f3f9;
+  --surface:  #ffffff;
+  --surface2: #f7f9fc;
+  --border:   #e3e8f0;
+  --border2:  #c8d2e5;
+  --muted:    #94a3b8;
+
+  --blue:     #2563eb;
+  --blue-d:   #1d4ed8;
+  --blue-l:   #eff4ff;
+  --blue-g:   rgba(37,99,235,.12);
+
+  --green:    #16a34a;
+  --green-l:  #f0fdf4;
+  --amber:    #d97706;
+  --amber-l:  #fffbeb;
+  --red:      #dc2626;
+  --red-l:    #fef2f2;
+  --orange:   #ea580c;
+  --orange-l: #fff7ed;
+  --gray:     #6b7280;
+  --gray-l:   #f9fafb;
+  --purple:   #7c3aed;
+  --purple-l: #f5f3ff;
+
+  --text:     #0f172a;
+  --text2:    #334155;
+  --text3:    #64748b;
+  --text4:    #94a3b8;
+
+  --sh-sm:  0 1px 4px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.04);
+  --sh-md:  0 4px 16px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.05);
+  --sh-lg:  0 8px 32px rgba(0,0,0,.12);
+
+  --r-sm: 7px;
+  --r-md: 11px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+
+  /* Fuentes via Next.js font (sin @import externo) */
+  --font-sans: var(--font-sans, 'Plus Jakarta Sans', sans-serif);
+  --font-mono: var(--font-mono, 'Fira Code', monospace);
+}
+
+/* ── Reset ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Sin scroll-behavior: smooth en html — lo maneja Next.js con data-scroll-behavior */
+html { scroll-behavior: auto; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans), sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  /* Mejora rendimiento de scroll y paint */
+  text-rendering: optimizeSpeed;
+}
+a { text-decoration: none; color: inherit; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+
+/* ── Keyframes — solo los esenciales ──────────────────── */
+@keyframes fadeUp { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:none } }
+@keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+@keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+@keyframes spin    { to { transform: rotate(360deg) } }
+
+/* Animaciones solo si el SO no pide reducir movimiento */
+@media (prefers-reduced-motion: no-preference) {
+  .anim-up { animation: fadeUp .25s ease both; }
+  .anim-in { animation: fadeIn .2s ease both; }
+}
+
+/* ── Skeleton ───────────────────────────────────────────── */
+.skel {
+  background: linear-gradient(90deg,#e8ecf4 25%,#f3f5fb 50%,#e8ecf4 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite;
+  border-radius: var(--r-sm);
+}
+
+/* ── Card ───────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-sm);
+}
+.card-p { padding: 22px 24px; }
+
+/* ── Badges ─────────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 99px;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase; line-height: 1;
+  white-space: nowrap;
+}
+.badge-green  { background: var(--green-l);  color: var(--green);  }
+.badge-amber  { background: var(--amber-l);  color: var(--amber);  }
+.badge-red    { background: var(--red-l);    color: var(--red);    }
+.badge-orange { background: var(--orange-l); color: var(--orange); }
+.badge-gray   { background: var(--gray-l);   color: var(--gray);   }
+.badge-blue   { background: var(--blue-l);   color: var(--blue);   }
+.badge-purple { background: var(--purple-l); color: var(--purple); }
+
+/* ── Inputs ─────────────────────────────────────────────── */
+.inp {
+  width: 100%; padding: 9px 13px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-sm);
+  font-family: inherit; font-size: 13px; color: var(--text);
+  background: var(--surface); outline: none;
+  /* Solo transicionar border y shadow, NO "all" */
+  transition: border-color .15s, box-shadow .15s;
+}
+.inp:focus  { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-g); }
+.inp::placeholder { color: var(--muted); }
+.inp:disabled { background: var(--surface2); color: var(--text4); cursor: not-allowed; }
+select.inp, textarea.inp { cursor: pointer; }
+textarea.inp { resize: vertical; min-height: 72px; }
+
+/* ── Buttons ────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 18px; border-radius: var(--r-sm);
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: none;
+  /* Solo transicionar propiedades específicas, NO "all" */
+  transition: background-color .15s, box-shadow .15s, opacity .15s;
+  white-space: nowrap; outline: none; line-height: 1.4;
+  /* Hint al navegador para optimizar */
+  will-change: auto;
+}
+.btn:disabled    { opacity: .45; cursor: not-allowed; pointer-events: none; }
+.btn-primary     { background: var(--blue);   color: #fff; }
+.btn-primary:hover:not(:disabled)   { background: var(--blue-d); box-shadow: var(--sh-sm); }
+.btn-success     { background: var(--green);  color: #fff; }
+.btn-success:hover:not(:disabled)   { background: #15803d; }
+.btn-danger      { background: var(--red);    color: #fff; }
+.btn-danger:hover:not(:disabled)    { background: #b91c1c; }
+.btn-amber       { background: var(--amber);  color: #fff; }
+.btn-amber:hover:not(:disabled)     { background: #b45309; }
+.btn-ghost       { background: transparent; color: var(--text3); border: 1.5px solid var(--border); }
+.btn-ghost:hover:not(:disabled)     { background: var(--bg); color: var(--text2); }
+.btn-ghost-blue  { background: var(--blue-l); color: var(--blue); border: 1.5px solid rgba(37,99,235,.2); }
+.btn-ghost-blue:hover:not(:disabled){ background: #dbeafe; }
+.btn-sm  { padding: 6px 12px; font-size: 12px; }
+.btn-lg  { padding: 12px 26px; font-size: 15px; }
+.btn-xl  { padding: 14px 32px; font-size: 16px; font-weight: 700; }
+
+/* ── Labels & Titles ────────────────────────────────────── */
+.label { display: block; font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+.section-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text4);
+  display: flex; align-items: center; gap: 8px; padding: 10px 0 6px;
+}
+.section-title::before { content:''; display:block; width:3px; height:13px; background:var(--blue); border-radius:2px; }
+
+/* ── Stat cards ─────────────────────────────────────────── */
+.stat-card { padding: 20px 22px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--border); box-shadow: var(--sh-sm); }
+.stat-card .num { font-size: 34px; font-weight: 800; letter-spacing: -.02em; line-height: 1; }
+.stat-card .lbl { font-size: 12px; color: var(--text3); font-weight: 500; margin-top: 4px; }
+
+/* ── Tables ─────────────────────────────────────────────── */
+.table-wrap { border-radius: var(--r-lg); overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  background: var(--surface2); padding: 10px 14px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text3); text-align: left;
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+tbody td {
+  padding: 11px 14px; font-size: 13px; color: var(--text2);
+  border-bottom: 1px solid var(--border); vertical-align: middle;
+}
+tbody tr:last-child td { border-bottom: none; }
+/* Hover con background-color en vez de background (más eficiente) */
+tbody tr:hover td { background-color: var(--surface2); }
+
+/* ── Progress ───────────────────────────────────────────── */
+.progress { height: 8px; border-radius: 99px; background: var(--border); overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--blue), #60a5fa); border-radius: 99px; transition: width .5s ease; }
+
+/* ── Spinner ────────────────────────────────────────────── */
+.spinner { display: inline-block; width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid var(--border); border-top-color: var(--blue); animation: spin .7s linear infinite; }
+.spinner-sm { width: 14px; height: 14px; border-width: 2px; }
+.spinner-white { border-color: rgba(255,255,255,.3); border-top-color: #fff; }
+
+/* ── Forms ──────────────────────────────────────────────── */
+.form-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+.form-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+
+/* ── Modal — sin backdrop-filter: blur (muy costoso en CPU) */
+.modal-overlay {
+  position: fixed; inset: 0;
+  /* Reemplazar blur por fondo semitransparente sólido — mismo efecto, 10x más rápido */
+  background: rgba(10,20,40,.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 20px;
+  animation: fadeIn .18s ease;
+}
+.modal {
+  background: var(--surface); border-radius: var(--r-xl);
+  box-shadow: var(--sh-lg); width: 100%;
+  max-width: 580px; max-height: 90vh; overflow-y: auto;
+  animation: fadeUp .2s ease;
+}
+.modal-header { padding: 22px 26px 0; border-bottom: 1px solid var(--border); padding-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+.modal-body   { padding: 22px 26px; }
+.modal-footer { padding: 16px 26px 22px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--border); }
+
+/* ── Toast ──────────────────────────────────────────────── */
+.toast { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: var(--r-md); font-size: 13px; font-weight: 500; box-shadow: var(--sh-lg); animation: fadeUp .2s ease; max-width: 380px; color: #fff; }
+.toast-success { background: var(--green); }
+.toast-error   { background: var(--red);   }
+.toast-info    { background: var(--blue);  }
+
+/* ── Misc ───────────────────────────────────────────────── */
+.mono { font-family: var(--font-mono), monospace; font-size: .82em; }
+.page-title { font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.page-sub { color: var(--text3); font-size: 13px; margin-top: 4px; }
+.divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+.empty-state { text-align: center; padding: 48px 24px; color: var(--text4); }
+.empty-state svg { opacity: .3; margin: 0 auto 14px; display: block; }
+
+/* ── Contenido principal — evitar reflows innecesarios ──── */
+main { contain: layout style; }

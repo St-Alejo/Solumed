@@ -1,0 +1,8 @@
+{
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js",
+  "/(app)/recepcion/page": "app/(app)/recepcion/page.js",
+  "/(app)/invima/page": "app/(app)/invima/page.js",
+  "/(app)/historial/page": "app/(app)/historial/page.js",
+  "/(app)/perfil/page": "app/(app)/perfil/page.js"
+}
