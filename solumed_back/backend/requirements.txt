@@ -7,25 +7,22 @@ python-multipart==0.0.12
 pydantic-settings==2.6.1
 
 # Auth
-PyJWT==2.10.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
 bcrypt==4.2.1
 
 # Base de datos
-# SQLite viene incluido en Python — no requiere instalación
-# Para PostgreSQL / Supabase:
 psycopg2-binary==2.9.10
 
-# HTTP (para INVIMA API y Supabase Storage)
+# HTTP
 httpx==0.28.1
 
-# PDF generation (fallbacks en orden)
+# PDF
 reportlab==4.2.5
-# weasyprint==62.3        # Descomenta si tienes GTK instalado
-# pdfkit==1.0.0           # Descomenta si tienes wkhtmltopdf instalado
 
 # Excel
 openpyxl==3.1.5
 
-# OCR / procesamiento de imágenes
+# OCR
 Pillow==11.0.0
-# pytesseract==0.3.13     # Descomenta si tienes Tesseract instalado
+pytesseract==0.3.13
