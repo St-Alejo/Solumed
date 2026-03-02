@@ -552,9 +552,9 @@ def dashboard_global() -> dict:
     d15 = _adapt_interval(15, "+")
     hoy = _adapt_now_date()
 
-    total_drogerias   = (_fetch_one("SELECT COUNT(*) AS n FROM drogerias WHERE activa=1") or {}).get("n", 0)
+    total_drogerias   = (_fetch_one("SELECT COUNT(*) AS n FROM drogerias WHERE activa=TRUE") or {}).get("n", 0)
     licencias_activas = (_fetch_one("SELECT COUNT(*) AS n FROM licencias WHERE estado='activa'") or {}).get("n", 0)
-    total_usuarios    = (_fetch_one("SELECT COUNT(*) AS n FROM usuarios WHERE activo=1 AND rol!='superadmin'") or {}).get("n", 0)
+    total_usuarios    = (_fetch_one("SELECT COUNT(*) AS n FROM usuarios WHERE activo=TRUE AND rol!='superadmin'") or {}).get("n", 0)
     total_recepciones = (_fetch_one("SELECT COUNT(*) AS n FROM historial") or {}).get("n", 0)
 
     top_drogerias = _fetch_all("""
