@@ -1,0 +1,18 @@
+# Frontend
+solumed_front/frontend/node_modules/
+solumed_front/frontend/.next/
+solumed_front/frontend/.env.local
+solumed_front/frontend/.env
+
+# Backend
+solumed_back/backend/venv/
+solumed_back/backend/.venv/
+solumed_back/backend/__pycache__/
+solumed_back/backend/**/__pycache__/
+solumed_back/backend/data/
+solumed_back/backend/uploads/
+solumed_back/backend/reportes/
+solumed_back/backend/*.db
+solumed_back/backend/*.sqlite
+solumed_back/backend/.env
+solumed_back/backend/.env.example
