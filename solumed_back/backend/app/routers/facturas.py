@@ -60,7 +60,13 @@ async def procesar(
             "productos": productos,
         }
     except Exception as e:
+        import traceback
+        traceback.print_exc()  # ← esto lo mostrará en Railway logs
         raise HTTPException(500, f"Error procesando factura: {e}")
+    
+
+
+
     finally:
         if ruta_temp.exists():
             ruta_temp.unlink()
