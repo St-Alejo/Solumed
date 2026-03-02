@@ -517,7 +517,7 @@ def obtener_historial(drogeria_id: int, desde: str = None, hasta: str = None,
 def estadisticas_drogeria(drogeria_id: int) -> dict:
     d30 = _adapt_interval(30, "-")
     rows = _fetch_all(
-        f"SELECT cumple, defectos, fecha_proceso FROM historial WHERE drogeria_id=? AND fecha_proceso >= {d30}",
+        f"SELECT cumple, defectos, fecha_proceso FROM historial WHERE drogeria_id=? AND fecha_proceso::date >= {d30}",
         (drogeria_id,)
     )
     total_all = _fetch_one("SELECT COUNT(*) AS n FROM historial WHERE drogeria_id=?", (drogeria_id,))
