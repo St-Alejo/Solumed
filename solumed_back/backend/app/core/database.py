@@ -572,7 +572,7 @@ def dashboard_global() -> dict:
         SELECT l.*, d.nombre AS drogeria_nombre
         FROM licencias l JOIN drogerias d ON l.drogeria_id = d.id
         WHERE l.estado = 'activa'
-        AND l.vencimiento BETWEEN {hoy} AND {d15}
+        AND l.vencimiento::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '15 days'
         ORDER BY l.vencimiento
     """))
 
