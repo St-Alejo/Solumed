@@ -416,7 +416,7 @@ def listar_drogerias() -> list[dict]:
                 WHERE drogeria_id = d.id AND estado = 'activa'
                 ORDER BY id DESC LIMIT 1
             )
-        LEFT JOIN usuarios u ON u.drogeria_id = d.id AND u.activo = TRUE
+        LEFT JOIN usuarios u ON u.drogeria_id = d.id AND u.activo=TRUE
         LEFT JOIN historial h ON h.drogeria_id = d.id
         GROUP BY d.id, d.nombre, d.nit, d.ciudad, d.direccion, d.telefono,
                  d.email, d.logo_url, d.activa, d.creada_en,
@@ -432,7 +432,7 @@ def actualizar_drogeria(did: int, **campos):
 
 
 def desactivar_drogeria(did: int):
-    _execute("UPDATE drogerias SET activa=0 WHERE id=?", (did,))
+    _execute("UPDATE drogerias SET activa=FALSE WHERE id=?", (did,))
 
 
 # ══════════════════════════════════════════════════════════════
@@ -575,9 +575,9 @@ def dashboard_global() -> dict:
     d15 = _adapt_interval(15, "+")
     hoy = _adapt_now_date()
 
-    total_drogerias   = (_fetch_one("SELECT COUNT(*) AS n FROM drogerias WHERE activa=1") or {}).get("n", 0)
+    total_drogerias   = (_fetch_one("SELECT COUNT(*) AS n FROM drogerias WHERE activa=TRUE") or {}).get("n", 0)
     licencias_activas = (_fetch_one("SELECT COUNT(*) AS n FROM licencias WHERE estado='activa'") or {}).get("n", 0)
-    total_usuarios    = (_fetch_one("SELECT COUNT(*) AS n FROM usuarios WHERE activo=1 AND rol!='superadmin'") or {}).get("n", 0)
+    total_usuarios    = (_fetch_one("SELECT COUNT(*) AS n FROM usuarios WHERE activo=TRUE AND rol!='superadmin'") or {}).get("n", 0)
     total_recepciones = (_fetch_one("SELECT COUNT(*) AS n FROM historial") or {}).get("n", 0)
 
     top_drogerias = _fetch_all("""
