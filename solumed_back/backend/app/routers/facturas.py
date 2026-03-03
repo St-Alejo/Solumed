@@ -14,7 +14,7 @@ from app.core.auth import require_licencia_activa
 from app.core.config import settings
 from app.core.database import guardar_recepcion, get_drogeria
 from app.models.schemas import GuardarRecepcionRequest
-from app.services.ocr_service import procesar_factura, procesar_multiples_facturas
+from app.services.ocr_service import procesar_factura
 from app.services.pdf_service import generar_reporte_pdf
 
 router = APIRouter()
