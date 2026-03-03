@@ -591,13 +591,22 @@ def dashboard_global() -> dict:
         ORDER BY recepciones DESC LIMIT 5
     """)
 
-    por_vencer = _fetch_all(_adapt_query(f"""
-        SELECT l.*, d.nombre AS drogeria_nombre
-        FROM licencias l JOIN drogerias d ON l.drogeria_id = d.id
-        WHERE l.estado = 'activa'
-        AND l.vencimiento BETWEEN {hoy} AND {d15}
-        ORDER BY l.vencimiento
-    """))
+    if settings.usar_postgres:
+        por_vencer = _fetch_all("""
+            SELECT l.*, d.nombre AS drogeria_nombre
+            FROM licencias l JOIN drogerias d ON l.drogeria_id = d.id
+            WHERE l.estado = 'activa'
+            AND l.vencimiento::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '15 days'
+            ORDER BY l.vencimiento
+        """)
+    else:
+        por_vencer = _fetch_all("""
+            SELECT l.*, d.nombre AS drogeria_nombre
+            FROM licencias l JOIN drogerias d ON l.drogeria_id = d.id
+            WHERE l.estado = 'activa'
+            AND l.vencimiento BETWEEN date('now') AND date('now', '+15 days')
+            ORDER BY l.vencimiento
+        """)
 
     return {
         "total_drogerias": total_drogerias,
