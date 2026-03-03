@@ -8,12 +8,13 @@ import uuid
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import FileResponse
+from typing import List
 
 from app.core.auth import require_licencia_activa
 from app.core.config import settings
 from app.core.database import guardar_recepcion, get_drogeria
 from app.models.schemas import GuardarRecepcionRequest
-from app.services.ocr_service import procesar_factura
+from app.services.ocr_service import procesar_factura, procesar_multiples_facturas
 from app.services.pdf_service import generar_reporte_pdf
 
 router = APIRouter()
@@ -46,7 +47,7 @@ async def procesar(
         )
 
     ext = Path(archivo.filename or "factura.pdf").suffix or ".pdf"
-    ruta_temp = settings.UPLOAD_DIR / f"{uuid.uuid4()}{ext}"
+    ruta_temp = Path("/tmp") / f"{uuid.uuid4()}{ext}"
 
     try:
         contenido = await archivo.read()
@@ -55,21 +56,74 @@ async def procesar(
         productos = await procesar_factura(str(ruta_temp))
 
         return {
-            "ok":       True,
-            "total":    len(productos),
+            "ok":        True,
+            "total":     len(productos),
             "productos": productos,
         }
     except Exception as e:
         import traceback
-        traceback.print_exc()  # ← esto lo mostrará en Railway logs
+        traceback.print_exc()
         raise HTTPException(500, f"Error procesando factura: {e}")
-    
-
-
-
     finally:
         if ruta_temp.exists():
             ruta_temp.unlink()
+
+
+@router.post("/procesar-multiple")
+async def procesar_multiple(
+    archivos: List[UploadFile] = File(..., description="Múltiples facturas en PDF o imagen"),
+    u: dict = Depends(require_licencia_activa),
+):
+    """
+    Procesa múltiples facturas simultáneamente en paralelo.
+    Retorna resultados individuales por cada archivo.
+    """
+    if len(archivos) > 10:
+        raise HTTPException(400, "Máximo 10 facturas a la vez")
+
+    rutas_temp = []
+    nombres = []
+
+    try:
+        # Guardar todos los archivos temporalmente
+        for archivo in archivos:
+            if archivo.content_type not in TIPOS_ACEPTADOS:
+                raise HTTPException(400, f"Tipo no soportado: {archivo.filename}")
+            ext = Path(archivo.filename or "factura.pdf").suffix or ".pdf"
+            ruta_temp = Path("/tmp") / f"{uuid.uuid4()}{ext}"
+            contenido = await archivo.read()
+            ruta_temp.write_bytes(contenido)
+            rutas_temp.append(str(ruta_temp))
+            nombres.append(archivo.filename or "factura")
+
+        # Procesar en paralelo
+        resultados = await procesar_multiples_facturas(rutas_temp)
+
+        # Agregar nombre de archivo a cada resultado
+        for i, res in enumerate(resultados):
+            res["nombre_archivo"] = nombres[i]
+
+        total_productos = sum(r["total"] for r in resultados)
+        exitosos = sum(1 for r in resultados if r["ok"])
+
+        return {
+            "ok":             True,
+            "total_facturas": len(archivos),
+            "exitosas":       exitosos,
+            "total_productos": total_productos,
+            "resultados":     resultados,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Error procesando facturas: {e}")
+    finally:
+        for ruta in rutas_temp:
+            p = Path(ruta)
+            if p.exists():
+                p.unlink()
 
 
 @router.post("/guardar")
@@ -96,11 +150,11 @@ async def guardar(
             prods, ruta_pdf
         )
         return {
-            "ok":        True,
-            "mensaje":   f"{total} productos guardados",
+            "ok":         True,
+            "mensaje":    f"{total} productos guardados",
             "factura_id": body.factura_id,
-            "total":     total,
-            "ruta_pdf":  ruta_pdf,
+            "total":      total,
+            "ruta_pdf":   ruta_pdf,
         }
     except Exception as e:
         raise HTTPException(500, f"Error guardando recepción: {e}")
@@ -113,7 +167,6 @@ def descargar_reporte(
 ):
     """
     Descarga un reporte PDF generado previamente.
-    Valida que la ruta esté dentro del directorio de reportes.
     """
     p = Path(ruta)
     try:
