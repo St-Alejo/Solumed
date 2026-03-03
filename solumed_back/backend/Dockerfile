@@ -2,7 +2,6 @@ FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
-# Dependencias del sistema para WeasyPrint y Pillow
 RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
@@ -11,6 +10,11 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     shared-mime-info \
     curl \
+    tesseract-ocr \
+    tesseract-ocr-spa \
+    libgl1 \
+    libglib2.0-0 \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
