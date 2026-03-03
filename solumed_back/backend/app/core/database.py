@@ -399,7 +399,30 @@ def get_drogeria(did: int) -> Optional[dict]:
 
 
 def listar_drogerias() -> list[dict]:
-    return _fetch_all("SELECT * FROM drogerias ORDER BY nombre")
+    return _fetch_all("""
+        SELECT d.*,
+               l.plan        AS lic_plan,
+               l.estado      AS lic_estado,
+               l.vencimiento AS lic_vencimiento,
+               l.max_usuarios AS lic_max_usuarios,
+               COUNT(DISTINCT u.id) AS total_usuarios,
+               COUNT(DISTINCT h.id) AS total_recepciones
+        FROM drogerias d
+        LEFT JOIN licencias l
+            ON l.drogeria_id = d.id
+            AND l.estado = 'activa'
+            AND l.id = (
+                SELECT id FROM licencias
+                WHERE drogeria_id = d.id AND estado = 'activa'
+                ORDER BY id DESC LIMIT 1
+            )
+        LEFT JOIN usuarios u ON u.drogeria_id = d.id AND u.activo = TRUE
+        LEFT JOIN historial h ON h.drogeria_id = d.id
+        GROUP BY d.id, d.nombre, d.nit, d.ciudad, d.direccion, d.telefono,
+                 d.email, d.logo_url, d.activa, d.creada_en,
+                 l.plan, l.estado, l.vencimiento, l.max_usuarios
+        ORDER BY d.nombre
+    """)
 
 
 def actualizar_drogeria(did: int, **campos):
@@ -409,7 +432,7 @@ def actualizar_drogeria(did: int, **campos):
 
 
 def desactivar_drogeria(did: int):
-    _execute("UPDATE drogerias SET activa=FALSE WHERE id=?", (did,))
+    _execute("UPDATE drogerias SET activa=0 WHERE id=?", (did,))
 
 
 # ══════════════════════════════════════════════════════════════
@@ -442,13 +465,9 @@ def listar_licencias_todas() -> list[dict]:
 
 def verificar_licencia_activa(drogeria_id: int) -> bool:
     lic = get_licencia(drogeria_id)
-    venc = lic["vencimiento"]
-    if hasattr(venc, "isoformat"):
-        venc_str = venc.isoformat()[:10]
-    else:
-        venc_str = str(venc)[:10]
-    
-    if venc_str < date.today().isoformat():
+    if not lic:
+        return False
+    if str(lic["vencimiento"])[:10] < date.today().isoformat():
         _execute("UPDATE licencias SET estado='vencida' WHERE id=?", (lic["id"],))
         return False
     return True
@@ -521,7 +540,7 @@ def obtener_historial(drogeria_id: int, desde: str = None, hasta: str = None,
 def estadisticas_drogeria(drogeria_id: int) -> dict:
     d30 = _adapt_interval(30, "-")
     rows = _fetch_all(
-        f"SELECT cumple, defectos, fecha_proceso FROM historial WHERE drogeria_id=? AND fecha_proceso::date >= {d30}",
+        f"SELECT cumple, defectos, fecha_proceso FROM historial WHERE drogeria_id=? AND fecha_proceso >= {d30}",
         (drogeria_id,)
     )
     total_all = _fetch_one("SELECT COUNT(*) AS n FROM historial WHERE drogeria_id=?", (drogeria_id,))
@@ -556,9 +575,9 @@ def dashboard_global() -> dict:
     d15 = _adapt_interval(15, "+")
     hoy = _adapt_now_date()
 
-    total_drogerias   = (_fetch_one("SELECT COUNT(*) AS n FROM drogerias WHERE activa=TRUE") or {}).get("n", 0)
+    total_drogerias   = (_fetch_one("SELECT COUNT(*) AS n FROM drogerias WHERE activa=1") or {}).get("n", 0)
     licencias_activas = (_fetch_one("SELECT COUNT(*) AS n FROM licencias WHERE estado='activa'") or {}).get("n", 0)
-    total_usuarios    = (_fetch_one("SELECT COUNT(*) AS n FROM usuarios WHERE activo=TRUE AND rol!='superadmin'") or {}).get("n", 0)
+    total_usuarios    = (_fetch_one("SELECT COUNT(*) AS n FROM usuarios WHERE activo=1 AND rol!='superadmin'") or {}).get("n", 0)
     total_recepciones = (_fetch_one("SELECT COUNT(*) AS n FROM historial") or {}).get("n", 0)
 
     top_drogerias = _fetch_all("""
@@ -576,7 +595,7 @@ def dashboard_global() -> dict:
         SELECT l.*, d.nombre AS drogeria_nombre
         FROM licencias l JOIN drogerias d ON l.drogeria_id = d.id
         WHERE l.estado = 'activa'
-        AND l.vencimiento::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '15 days'
+        AND l.vencimiento BETWEEN {hoy} AND {d15}
         ORDER BY l.vencimiento
     """))
 
