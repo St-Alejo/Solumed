@@ -409,7 +409,7 @@ def actualizar_drogeria(did: int, **campos):
 
 
 def desactivar_drogeria(did: int):
-    _execute("UPDATE drogerias SET activa=0 WHERE id=?", (did,))
+    _execute("UPDATE drogerias SET activa=FALSE WHERE id=?", (did,))
 
 
 # ══════════════════════════════════════════════════════════════
@@ -442,9 +442,13 @@ def listar_licencias_todas() -> list[dict]:
 
 def verificar_licencia_activa(drogeria_id: int) -> bool:
     lic = get_licencia(drogeria_id)
-    if not lic:
-        return False
-    if str(lic["vencimiento"])[:10] < date.today().isoformat():
+    venc = lic["vencimiento"]
+    if hasattr(venc, "isoformat"):
+        venc_str = venc.isoformat()[:10]
+    else:
+        venc_str = str(venc)[:10]
+    
+    if venc_str < date.today().isoformat():
         _execute("UPDATE licencias SET estado='vencida' WHERE id=?", (lic["id"],))
         return False
     return True

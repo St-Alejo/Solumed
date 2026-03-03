@@ -82,7 +82,7 @@ def require_licencia_activa(u: dict = Depends(get_usuario_actual)) -> dict:
     if not drogeria_id:
         raise HTTPException(status_code=403, detail="Usuario sin droguería asignada")
 
-    if not u.get("drogeria_activa"):
+    if u.get("drogeria_activa") is False:
         raise HTTPException(status_code=403, detail="Droguería desactivada")
 
     if not verificar_licencia_activa(drogeria_id):
