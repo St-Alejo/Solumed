@@ -350,15 +350,96 @@ def _parsear_formato_b(lineas: list[str]) -> list[dict]:
     return productos
 
 
+
+def _parsear_distrimayor(lineas: list[str]) -> list[dict]:
+    """
+    Formato Distrimayor Pasto SAS.
+    Columnas: CODIGO  DESCRIPCION  LOTE  F.VENCE  CANTIDAD  VALOR_UND  %IVA  TOTAL
+    Ejemplo:  0012567 GYNOCOMFOR 2% CR VAG X 20 GR  S19445  2027-07  4  20.595,24  0,00  82.380,96
+    Línea siguiente: Reg.Sanit.2014M-0015202 - Cod_CUM 020066231-01 - Ven.Reg.Sanit.2028-10-27
+    OBS = obsequio, se descarta.
+    """
+    RE_DIST = re.compile(
+        r'^\ *(\d{4,7}\*?)\s+(.+?)\s+([A-Z]{0,2}\d{4,8})\s+'
+        r'(\d{4}-\d{2})\s+(\d{1,4})\s+[\d.,]+\s+[\d.,]+\s+[\d.,]+$'
+    )
+    RE_RS = re.compile(
+        r'Reg\.Sanit\.([A-Z0-9\-]+)\s*(?:-\s*Cod_CUM\s+([A-Z0-9\-]+))?\s*'
+        r'(?:-\s*Ven\.Reg\.Sanit\.\s*(\d{4}-\d{2}-\d{2}))?',
+        re.IGNORECASE
+    )
+    RE_VEN = re.compile(r'^Ven\.Reg\.Sanit\.\s*(\d{4}-\d{2}-\d{2})', re.IGNORECASE)
+
+    productos = []
+    producto_actual = None
+    en_tabla = False
+
+    for linea in lineas:
+        linea = linea.strip()
+        if not linea:
+            continue
+        if re.search(r'CODIGO.+DESCRIPCION.+LOTE', linea, re.IGNORECASE):
+            en_tabla = True
+            continue
+        if en_tabla and RE_PIE.search(linea):
+            break
+        if not en_tabla:
+            continue
+
+        # Vencimiento RS en línea propia
+        m_ven = RE_VEN.match(linea)
+        if m_ven and producto_actual and not producto_actual.get('reg_ven'):
+            producto_actual['reg_ven'] = m_ven.group(1)
+            continue
+
+        # Reg.Sanit en la línea siguiente al producto
+        m_rs = RE_RS.search(linea)
+        if m_rs and producto_actual:
+            if not producto_actual.get('registro_sanitario_factura') and m_rs.group(1):
+                rs = re.sub(r'\s+', '', m_rs.group(1))
+                producto_actual['registro_sanitario_factura'] = f"INVIMA {rs.upper()}"
+            if m_rs.group(3) and not producto_actual.get('reg_ven'):
+                producto_actual['reg_ven'] = m_rs.group(3)
+            continue
+
+        # Línea de producto
+        m = RE_DIST.match(linea)
+        if m:
+            if producto_actual:
+                productos.append(producto_actual)
+            # Descartar obsequios (OBS)
+            if RE_OBSEQUIO.search(m.group(2)):
+                producto_actual = None
+                continue
+            producto_actual = {
+                'codigo_producto':            m.group(1).rstrip('*'),
+                'nombre_producto':            m.group(2).strip(),
+                'lote':                       m.group(3).upper(),
+                'vencimiento':                m.group(4),
+                'cantidad':                   int(m.group(5)),
+                'registro_sanitario_factura': '',
+            }
+
+    if producto_actual:
+        productos.append(producto_actual)
+
+    return productos
+
 def _detectar_formato(lineas: list[str]) -> str:
     """
     Detecta qué formato tiene la factura.
-    Retorna 'A' (todo en línea), 'B' (nombre + RS en línea siguiente), o 'GENERICO'.
+    Retorna 'DISTRIMAYOR', 'A', 'B', o 'GENERICO'.
     """
+    cabecera = " ".join(lineas[:40]).upper()
+
+    # Distrimayor: NIT 891.200.235 o nombre en cabecera
+    if "891.200.235" in cabecera or "DISTRIMAYOR" in cabecera:
+        return "DISTRIMAYOR"
+
     formato_a = 0
     formato_b = 0
 
-    for linea in lineas[:80]:  # analizar primeras 80 líneas
+    for linea in lineas[:80]:
         if RE_FORMATO_A.match(linea.strip()):
             formato_a += 1
         if RE_RS_CUM_VEN.search(linea) and 'Reg.Sanit' in linea:
@@ -410,7 +491,9 @@ def _parsear_lineas(lineas: list[str]) -> list[dict]:
     """
     formato = _detectar_formato(lineas)
 
-    if formato == "A":
+    if formato == "DISTRIMAYOR":
+        productos = _parsear_distrimayor(lineas)
+    elif formato == "A":
         productos = _parsear_formato_a(lineas)
     elif formato == "B":
         productos = _parsear_formato_b(lineas)
