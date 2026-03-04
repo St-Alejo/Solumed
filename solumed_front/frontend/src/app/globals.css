@@ -237,3 +237,118 @@ tbody tr:hover td { background-color: var(--surface2); }
 
 /* ── Contenido principal — evitar reflows innecesarios ──── */
 main { contain: layout style; }
+
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE — Mobile First
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Sidebar overlay (móvil) ──────────────────────────── */
+.sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.55);
+  z-index: 49;
+  animation: fadeIn .2s ease;
+}
+.sidebar-overlay.open { display: block; }
+
+/* ── Botón hamburguesa ────────────────────────────────── */
+.topbar-mobile {
+  display: none;
+  position: fixed; top: 0; left: 0; right: 0;
+  height: 56px;
+  background: #0c1421;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  align-items: center; justify-content: space-between;
+  padding: 0 16px;
+  z-index: 48;
+}
+.hamburger {
+  display: flex; flex-direction: column; gap: 5px;
+  background: none; border: none; cursor: pointer; padding: 6px;
+}
+.hamburger span {
+  display: block; width: 22px; height: 2px;
+  background: #94a3b8; border-radius: 2px;
+  transition: transform .2s, opacity .2s;
+}
+
+/* ── Form rows responsive ─────────────────────────────── */
+@media (max-width: 640px) {
+  .form-row, .form-row-3 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Tables — scroll horizontal en móvil ─────────────── */
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Cards — padding reducido en móvil ───────────────── */
+@media (max-width: 640px) {
+  .card-p { padding: 16px; }
+  .modal { max-width: 100%; border-radius: var(--r-lg) var(--r-lg) 0 0; max-height: 92vh; }
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal-header { padding: 18px 18px 14px; }
+  .modal-body   { padding: 16px 18px; }
+  .modal-footer { padding: 12px 18px 20px; }
+  .page-title { font-size: 20px; }
+  .btn-xl { padding: 12px 20px; font-size: 14px; }
+}
+
+/* ── Layout principal ─────────────────────────────────── */
+@media (max-width: 768px) {
+  .topbar-mobile { display: flex; }
+
+  .app-sidebar {
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+  }
+  .app-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .app-main {
+    margin-left: 0 !important;
+    padding: 72px 16px 24px !important;
+  }
+
+  .admin-sidebar {
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+  }
+  .admin-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .admin-main {
+    margin-left: 0 !important;
+    padding: 72px 16px 24px !important;
+  }
+}
+
+/* ── Grids adaptativos ────────────────────────────────── */
+@media (max-width: 900px) {
+  .grid-4-cols { grid-template-columns: repeat(2, 1fr) !important; }
+  .grid-2-cols { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 540px) {
+  .grid-4-cols { grid-template-columns: 1fr 1fr !important; }
+}
+
+/* ── Stat cards — número más pequeño en móvil ────────── */
+@media (max-width: 640px) {
+  .stat-card .num { font-size: 26px; }
+}
+
+/* ── Tablas — ocultar columnas secundarias en móvil ──── */
+@media (max-width: 700px) {
+  .col-hide-mobile { display: none !important; }
+}
+
+/* ── Botones — full width en móvil si tiene clase ─────── */
+@media (max-width: 480px) {
+  .btn-block-mobile { width: 100%; justify-content: center; }
+}

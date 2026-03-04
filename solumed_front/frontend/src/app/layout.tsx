@@ -1,36 +1,38 @@
-import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, Fira_Code } from "next/font/google";
-import "./globals.css";
-import { AuthProvider } from "@/lib/auth";
+"use client";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth";
+import Sidebar from "@/components/layout/Sidebar";
+import { ToastProvider } from "@/components/ui/Toast";
 
-// Fuentes cargadas por Next.js (optimizadas, sin bloqueo de render, sin petición externa)
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
-  display: "swap",
-  variable: "--font-sans",
-  preload: true,
-});
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const { usuario, loading } = useAuth();
+  const router = useRouter();
 
-const firaCode = Fira_Code({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  display: "swap",
-  variable: "--font-mono",
-  preload: false, // mono solo se usa en tablas, no bloquear
-});
+  useEffect(() => {
+    if (!loading && !usuario) router.replace("/login");
+    if (!loading && usuario?.rol === "superadmin") router.replace("/admin");
+  }, [usuario, loading]);
 
-export const metadata: Metadata = {
-  title: "SoluMed — Recepción Técnica",
-  description: "Sistema SaaS de recepción técnica de medicamentos para farmacias colombianas",
-};
+  if (loading || !usuario) {
+    return (
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh" }}>
+        <div className="spinner" style={{ width:32, height:32 }} />
+      </div>
+    );
+  }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${jakarta.variable} ${firaCode.variable}`} data-scroll-behavior="smooth">
-      <body>
-        <AuthProvider>{children}</AuthProvider>
-      </body>
-    </html>
+    <ToastProvider>
+      <div style={{ display:"flex" }}>
+        <Sidebar />
+        <main className="app-main" style={{
+          marginLeft:258, minHeight:"100vh", flex:1,
+          padding:"28px 32px", background:"var(--bg)",
+        }}>
+          {children}
+        </main>
+      </div>
+    </ToastProvider>
   );
 }

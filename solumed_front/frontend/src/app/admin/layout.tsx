@@ -1,10 +1,10 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { ToastProvider } from "@/components/ui/Toast";
-import { FlaskConical, LayoutDashboard, Building2, CreditCard, LogOut, ChevronRight } from "lucide-react";
+import { FlaskConical, LayoutDashboard, Building2, CreditCard, LogOut, ChevronRight, Menu, X } from "lucide-react";
 
 const NAV = [
   { href:"/admin",           label:"Dashboard",   icon:LayoutDashboard },
@@ -16,6 +16,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { usuario, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [abierto, setAbierto] = useState(false);
+
+  // Cerrar al cambiar ruta
+  useEffect(() => { setAbierto(false); }, [pathname]);
+  useEffect(() => { document.body.style.overflow = abierto ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [abierto]);
 
   useEffect(() => {
     if (!loading && !usuario) router.replace("/login");
@@ -34,11 +39,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <ToastProvider>
       <div style={{ display:"flex" }}>
         {/* Sidebar Admin */}
-        <aside style={{
+        {/* Topbar móvil admin */}
+        <div className="topbar-mobile" style={{ background:"#0a0f1a" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#7c3aed,#a855f7)",display:"flex",alignItems:"center",justifyContent:"center" }}>
+              <FlaskConical size={14} color="#fff"/>
+            </div>
+            <span style={{ color:"#f1f5f9",fontWeight:800,fontSize:14 }}>SoluMed Admin</span>
+          </div>
+          <button className="hamburger" onClick={()=>setAbierto(true)} aria-label="Abrir menú">
+            <span/><span/><span/>
+          </button>
+        </div>
+        {abierto && <div className="sidebar-overlay open" onClick={()=>setAbierto(false)}/>}
+        <aside className={`admin-sidebar${abierto?" open":""}`} style={{
           position:"fixed", left:0, top:0, width:240, height:"100vh",
           background:"#0a0f1a", borderRight:"1px solid rgba(255,255,255,.06)",
-          display:"flex", flexDirection:"column", zIndex:50,
+          display:"flex", flexDirection:"column", zIndex:50, overflowY:"auto",
         }}>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"8px 12px 0" }}>
+            <button onClick={()=>setAbierto(false)} style={{ background:"none",border:"none",cursor:"pointer",color:"#475569",padding:4,display:"flex" }}><X size={16}/></button>
+          </div>
           <div style={{ padding:"20px 16px 14px", borderBottom:"1px solid rgba(255,255,255,.06)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:11 }}>
               <div style={{ width:36,height:36,borderRadius:9,background:"linear-gradient(135deg,#7c3aed,#a855f7)",display:"flex",alignItems:"center",justifyContent:"center" }}>
@@ -89,7 +110,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </aside>
 
-        <main style={{ marginLeft:240, minHeight:"100vh", flex:1, padding:"28px 32px", background:"var(--bg)" }}>
+        <main className="admin-main" style={{ marginLeft:240, minHeight:"100vh", flex:1, padding:"28px 32px", background:"var(--bg)" }}>
           {children}
         </main>
       </div>

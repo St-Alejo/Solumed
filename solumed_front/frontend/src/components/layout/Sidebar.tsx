@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useState, useEffect } from "react";
 import {
   FlaskConical, ClipboardCheck, History, Search,
   FileText, Users, LogOut, ChevronRight,
-  Building2, Key, AlertTriangle,
+  Building2, Key, AlertTriangle, Menu, X,
 } from "lucide-react";
 import { diasHasta } from "@/lib/utils";
 
@@ -22,18 +23,24 @@ export default function Sidebar() {
   const { usuario, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const [abierto, setAbierto] = useState(false);
 
   const diasLic = usuario?.licencia_vencimiento ? diasHasta(usuario.licencia_vencimiento) : null;
   const licProxVencer = diasLic !== null && diasLic >= 0 && diasLic <= 10;
 
+  // Cerrar sidebar al cambiar de ruta (móvil)
+  useEffect(() => { setAbierto(false); }, [pathname]);
+
+  // Bloquear scroll del body cuando el sidebar está abierto en móvil
+  useEffect(() => {
+    document.body.style.overflow = abierto ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [abierto]);
+
   const handleLogout = () => { logout(); router.push("/login"); };
 
-  return (
-    <aside style={{
-      position:"fixed", left:0, top:0, width:258, height:"100vh",
-      background:"#0c1421", borderRight:"1px solid rgba(255,255,255,.07)",
-      display:"flex", flexDirection:"column", zIndex:50, overflowY:"auto",
-    }}>
+  const contenidoSidebar = (
+    <>
       {/* Logo */}
       <div style={{ padding:"20px 16px 14px", borderBottom:"1px solid rgba(255,255,255,.06)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:11 }}>
@@ -49,6 +56,14 @@ export default function Sidebar() {
             <p style={{ color:"#f1f5f9", fontSize:14, fontWeight:800, letterSpacing:"-.01em", lineHeight:1.2 }}>SoluMed</p>
             <p style={{ color:"#334155", fontSize:11, marginTop:1 }}>Recepción Técnica</p>
           </div>
+          {/* Botón cerrar en móvil */}
+          <button
+            onClick={() => setAbierto(false)}
+            style={{ marginLeft:"auto", background:"none", border:"none", cursor:"pointer", color:"#475569", padding:4, display:"flex" }}
+            aria-label="Cerrar menú"
+          >
+            <X size={18} />
+          </button>
         </div>
       </div>
 
@@ -131,6 +146,51 @@ export default function Sidebar() {
           <LogOut size={15} /> <span style={{ fontSize:13 }}>Cerrar sesión</span>
         </button>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Topbar móvil */}
+      <div className="topbar-mobile">
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{
+            width:30, height:30, borderRadius:8,
+            background:"linear-gradient(135deg,#2563eb,#60a5fa)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+          }}>
+            <FlaskConical size={14} color="#fff" />
+          </div>
+          <span style={{ color:"#f1f5f9", fontWeight:800, fontSize:14 }}>SoluMed</span>
+        </div>
+        <button
+          className="hamburger"
+          onClick={() => setAbierto(true)}
+          aria-label="Abrir menú"
+        >
+          <span /><span /><span />
+        </button>
+      </div>
+
+      {/* Overlay oscuro (móvil) */}
+      {abierto && (
+        <div
+          className="sidebar-overlay open"
+          onClick={() => setAbierto(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`app-sidebar${abierto ? " open" : ""}`}
+        style={{
+          position:"fixed", left:0, top:0, width:258, height:"100vh",
+          background:"#0c1421", borderRight:"1px solid rgba(255,255,255,.07)",
+          display:"flex", flexDirection:"column", zIndex:50, overflowY:"auto",
+        }}
+      >
+        {contenidoSidebar}
+      </aside>
+    </>
   );
 }
