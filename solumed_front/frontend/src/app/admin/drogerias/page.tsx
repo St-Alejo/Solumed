@@ -102,34 +102,39 @@ export default function DrogeriasPage() {
         : drogerias.map(d=>(
           <div key={d.id} className="card" style={{marginBottom:12,overflow:"hidden"}}>
             {/* Fila principal */}
-            <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px",cursor:"pointer"}} onClick={()=>toggleExpand(d.id)}>
-              <div style={{width:40,height:40,borderRadius:10,background:d.activa?"var(--blue-l)":"var(--gray-l)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <Building2 size={18} color={d.activa?"var(--blue)":"var(--gray)"}/>
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <p style={{fontWeight:700,fontSize:14}}>{d.nombre}</p>
-                  <span className="badge badge-gray">{d.nit}</span>
-                  {!d.activa && <span className="badge badge-red">Inactiva</span>}
+            <div style={{padding:"14px 18px",cursor:"pointer"}} onClick={()=>toggleExpand(d.id)}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:38,height:38,borderRadius:10,background:d.activa?"var(--blue-l)":"var(--gray-l)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <Building2 size={17} color={d.activa?"var(--blue)":"var(--gray)"}/>
                 </div>
-                <p style={{fontSize:12,color:"var(--text4)",marginTop:2}}>
-                  {d.ciudad||"—"} · {d.total_usuarios||0} usuarios · {d.total_recepciones||0} recepciones
-                </p>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <p style={{fontWeight:700,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{d.nombre}</p>
+                    <span className="badge badge-gray" style={{flexShrink:0}}>{d.nit}</span>
+                    {!d.activa && <span className="badge badge-red">Inactiva</span>}
+                  </div>
+                  <p style={{fontSize:12,color:"var(--text4)",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {d.ciudad||"—"} · {d.total_usuarios||0} usuarios · {d.total_recepciones||0} recepciones
+                  </p>
+                </div>
+                {expandido===d.id?<ChevronUp size={16} color="var(--text4)" style={{flexShrink:0}}/>:<ChevronDown size={16} color="var(--text4)" style={{flexShrink:0}}/>}
               </div>
-
-              {d.lic_estado && (
-                <span className={`badge ${colorEstadoLicencia(d.lic_estado,d.lic_vencimiento||"")}`}>
-                  {planLabel(d.lic_plan||"")} · hasta {d.lic_vencimiento}
-                </span>
-              )}
-              {!d.lic_estado && <span className="badge badge-red">Sin licencia</span>}
-
-              <div style={{display:"flex",gap:8}} onClick={e=>e.stopPropagation()}>
-                <button className="btn btn-ghost-blue btn-sm" onClick={()=>abrirModal("crear_lic",d.id)} title="Crear/renovar licencia"><CreditCard size={12}/></button>
-                <button className="btn btn-ghost-blue btn-sm" onClick={()=>abrirModal("crear_user",d.id)} title="Crear usuario"><UserPlus size={12}/></button>
-                <button className={`btn btn-sm ${d.activa?"btn-ghost":"btn-success"}`} onClick={()=>toggleDrog(d.id,d.activa)} title={d.activa?"Desactivar":"Activar"}><Power size={12}/></button>
+              {/* Segunda fila: licencia + botones */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,flexWrap:"wrap",gap:8}} onClick={e=>e.stopPropagation()}>
+                <div>
+                  {d.lic_estado && (
+                    <span className={`badge ${colorEstadoLicencia(d.lic_estado,d.lic_vencimiento||"")}`}>
+                      {planLabel(d.lic_plan||"")} · hasta {d.lic_vencimiento}
+                    </span>
+                  )}
+                  {!d.lic_estado && <span className="badge badge-red">Sin licencia</span>}
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  <button className="btn btn-ghost-blue btn-sm" onClick={()=>abrirModal("crear_lic",d.id)} title="Crear/renovar licencia"><CreditCard size={12}/></button>
+                  <button className="btn btn-ghost-blue btn-sm" onClick={()=>abrirModal("crear_user",d.id)} title="Crear usuario"><UserPlus size={12}/></button>
+                  <button className={`btn btn-sm ${d.activa?"btn-ghost":"btn-success"}`} onClick={()=>toggleDrog(d.id,d.activa)} title={d.activa?"Desactivar":"Activar"}><Power size={12}/></button>
+                </div>
               </div>
-              {expandido===d.id?<ChevronUp size={16} color="var(--text4)"/>:<ChevronDown size={16} color="var(--text4)"/>}
             </div>
 
             {/* Panel expandido */}
