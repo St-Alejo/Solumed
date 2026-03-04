@@ -365,8 +365,12 @@ def _parsear_distrimayor(lineas: list[str]) -> list[dict]:
     OBS = obsequio, se descarta.
     """
     RE_DIST = re.compile(
-        r'^\ *(\d{4,7}\*?)\s+(.+?)\s+([A-Z]{0,2}\d{4,8})\s+'
-        r'(\d{4}-\d{2})\s+(\d{1,4})\s+[\d.,]+\s+[\d.,]+\s+[\d.,]+$'
+        r'^ *(\d{4,7}\*?)\s+'
+        r'(.+?)\s+'
+        r'(\S+)\s+'
+        r'(\d{4}-\d{2})\s+'
+        r'(\d{1,4})\s+'
+        r'[\d.,]+\s+[\d.,]+\s+[\d.,]+\s*$'
     )
     RE_RS = re.compile(
         r'Reg\.Sanit\.([A-Z0-9\-]+)\s*(?:-\s*Cod_CUM\s+([A-Z0-9\-]+))?\s*'
