@@ -1,12 +1,12 @@
 "use client";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { useState, useEffect } from "react";
 import {
   FlaskConical, ClipboardCheck, History, Search,
-  FileText, Users, LogOut, ChevronRight,
-  Building2, Key, AlertTriangle, Menu, X,
+  FileText, Users, LogOut, ChevronRight, X, Menu,
+  Building2, Key, AlertTriangle,
 } from "lucide-react";
 import { diasHasta } from "@/lib/utils";
 
@@ -25,13 +25,10 @@ export default function Sidebar() {
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
 
-  const diasLic = usuario?.licencia_vencimiento ? diasHasta(usuario.licencia_vencimiento) : null;
-  const licProxVencer = diasLic !== null && diasLic >= 0 && diasLic <= 10;
-
-  // Cerrar sidebar al cambiar de ruta (móvil)
+  // Cerrar al navegar
   useEffect(() => { setAbierto(false); }, [pathname]);
 
-  // Bloquear scroll del body cuando el sidebar está abierto en móvil
+  // Bloquear scroll del body cuando está abierto
   useEffect(() => {
     document.body.style.overflow = abierto ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
@@ -39,10 +36,13 @@ export default function Sidebar() {
 
   const handleLogout = () => { logout(); router.push("/login"); };
 
-  const contenidoSidebar = (
+  const diasLic = usuario?.licencia_vencimiento ? diasHasta(usuario.licencia_vencimiento) : null;
+  const licProxVencer = diasLic !== null && diasLic >= 0 && diasLic <= 10;
+
+  const SidebarContent = () => (
     <>
-      {/* Logo */}
-      <div style={{ padding:"20px 16px 14px", borderBottom:"1px solid rgba(255,255,255,.06)" }}>
+      {/* Logo + cerrar (móvil) */}
+      <div style={{ padding:"20px 16px 14px", borderBottom:"1px solid rgba(255,255,255,.06)", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div style={{ display:"flex", alignItems:"center", gap:11 }}>
           <div style={{
             width:38, height:38, borderRadius:10, flexShrink:0,
@@ -56,15 +56,14 @@ export default function Sidebar() {
             <p style={{ color:"#f1f5f9", fontSize:14, fontWeight:800, letterSpacing:"-.01em", lineHeight:1.2 }}>SoluMed</p>
             <p style={{ color:"#334155", fontSize:11, marginTop:1 }}>Recepción Técnica</p>
           </div>
-          {/* Botón cerrar en móvil */}
-          <button
-            onClick={() => setAbierto(false)}
-            style={{ marginLeft:"auto", background:"none", border:"none", cursor:"pointer", color:"#475569", padding:4, display:"flex" }}
-            aria-label="Cerrar menú"
-          >
-            <X size={18} />
-          </button>
         </div>
+        {/* Botón X solo en móvil */}
+        <button
+          onClick={() => setAbierto(false)}
+          className="sidebar-close-btn"
+          style={{ background:"none", border:"none", cursor:"pointer", color:"#475569", padding:4 }}>
+          <X size={20}/>
+        </button>
       </div>
 
       {/* Usuario */}
@@ -101,7 +100,7 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav style={{ flex:1, padding:"4px 10px", display:"flex", flexDirection:"column", gap:2 }}>
+      <nav style={{ flex:1, padding:"4px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
         {NAV_ITEMS.map(item => {
           const active = pathname.startsWith(item.href);
           const Icon = item.icon;
@@ -135,15 +134,15 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Logout */}
-      <div style={{ padding:"10px 12px 16px", borderTop:"1px solid rgba(255,255,255,.06)" }}>
+      {/* Logout — siempre pegado al fondo */}
+      <div style={{ padding:"10px 12px 16px", borderTop:"1px solid rgba(255,255,255,.06)", flexShrink:0 }}>
         <button onClick={handleLogout} style={{
           width:"100%", display:"flex", alignItems:"center", gap:10,
-          padding:"9px 12px", borderRadius:"var(--r-md)",
-          background:"none", border:"none", cursor:"pointer",
-          color:"#475569", transition:"color .15s",
+          padding:"10px 12px", borderRadius:"var(--r-md)",
+          background:"rgba(239,68,68,.08)", border:"1px solid rgba(239,68,68,.15)",
+          cursor:"pointer", color:"#f87171", transition:"all .15s",
         }}>
-          <LogOut size={15} /> <span style={{ fontSize:13 }}>Cerrar sesión</span>
+          <LogOut size={15} /> <span style={{ fontSize:13, fontWeight:600 }}>Cerrar sesión</span>
         </button>
       </div>
     </>
@@ -151,45 +150,103 @@ export default function Sidebar() {
 
   return (
     <>
+      <style>{`
+        .sidebar-close-btn { display: none; }
+
+        /* Topbar móvil */
+        .topbar-mobile {
+          display: none;
+          position: fixed; top: 0; left: 0; right: 0;
+          height: 56px; background: #0c1421;
+          border-bottom: 1px solid rgba(255,255,255,.07);
+          z-index: 48; padding: 0 16px;
+          align-items: center; justify-content: space-between;
+        }
+        .topbar-mobile-logo {
+          display: flex; align-items: center; gap: 10px;
+        }
+        .topbar-mobile-logo p {
+          color: #f1f5f9; font-size: 15px; font-weight: 800;
+        }
+        .topbar-mobile-logo span { color: #3b82f6; }
+
+        /* Botones topbar */
+        .topbar-right {
+          display: flex; align-items: center; gap: 8px;
+        }
+        .topbar-logout-btn {
+          display: flex; align-items: center; gap: 6px;
+          padding: 7px 12px; border-radius: 8px;
+          background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.2);
+          color: #f87171; font-size: 13px; font-weight: 600;
+          cursor: pointer;
+        }
+        .topbar-hamburger {
+          width: 36px; height: 36px; border-radius: 8px;
+          background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer; color: #94a3b8;
+        }
+
+        @media (max-width: 768px) {
+          .topbar-mobile       { display: flex !important; }
+          .sidebar-close-btn   { display: block !important; }
+
+          .app-sidebar {
+            transform: translateX(-100%);
+            transition: transform .25s ease;
+            top: 0 !important;
+          }
+          .app-sidebar.open {
+            transform: translateX(0);
+          }
+          .app-main {
+            margin-left: 0 !important;
+            padding-top: 72px !important;
+          }
+          .sidebar-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,.55);
+            z-index: 49;
+          }
+        }
+      `}</style>
+
       {/* Topbar móvil */}
       <div className="topbar-mobile">
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+        <div className="topbar-mobile-logo">
           <div style={{
-            width:30, height:30, borderRadius:8,
+            width:32, height:32, borderRadius:8,
             background:"linear-gradient(135deg,#2563eb,#60a5fa)",
             display:"flex", alignItems:"center", justifyContent:"center",
           }}>
-            <FlaskConical size={14} color="#fff" />
+            <FlaskConical size={15} color="#fff"/>
           </div>
-          <span style={{ color:"#f1f5f9", fontWeight:800, fontSize:14 }}>SoluMed</span>
+          <p>Solu<span>Med</span></p>
         </div>
-        <button
-          className="hamburger"
-          onClick={() => setAbierto(true)}
-          aria-label="Abrir menú"
-        >
-          <span /><span /><span />
-        </button>
+        <div className="topbar-right">
+          {/* Cerrar sesión visible siempre en topbar móvil */}
+          <button className="topbar-logout-btn" onClick={handleLogout}>
+            <LogOut size={14}/> Salir
+          </button>
+          <button className="topbar-hamburger" onClick={() => setAbierto(true)}>
+            <Menu size={18}/>
+          </button>
+        </div>
       </div>
 
-      {/* Overlay oscuro (móvil) */}
+      {/* Overlay */}
       {abierto && (
-        <div
-          className="sidebar-overlay open"
-          onClick={() => setAbierto(false)}
-        />
+        <div className="sidebar-overlay" onClick={() => setAbierto(false)}/>
       )}
 
       {/* Sidebar */}
-      <aside
-        className={`app-sidebar${abierto ? " open" : ""}`}
-        style={{
-          position:"fixed", left:0, top:0, width:258, height:"100vh",
-          background:"#0c1421", borderRight:"1px solid rgba(255,255,255,.07)",
-          display:"flex", flexDirection:"column", zIndex:50, overflowY:"auto",
-        }}
-      >
-        {contenidoSidebar}
+      <aside className={`app-sidebar${abierto ? " open" : ""}`} style={{
+        position:"fixed", left:0, top:0, width:258, height:"100vh",
+        background:"#0c1421", borderRight:"1px solid rgba(255,255,255,.07)",
+        display:"flex", flexDirection:"column", zIndex:50,
+      }}>
+        <SidebarContent/>
       </aside>
     </>
   );
