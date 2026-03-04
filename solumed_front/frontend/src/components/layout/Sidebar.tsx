@@ -6,8 +6,9 @@ import { useAuth } from "@/lib/auth";
 import {
   FlaskConical, ClipboardCheck, History, Search,
   FileText, Users, LogOut, ChevronRight, X, Menu,
-  Building2, Key, AlertTriangle,
+  Building2, Key, AlertTriangle, Sun, Moon,
 } from "lucide-react";
+import { useTheme } from "@/lib/theme";
 import { diasHasta } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const { usuario, logout } = useAuth();
+  const { theme, toggle } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
@@ -134,13 +136,27 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Logout — siempre pegado al fondo */}
-      <div style={{ padding:"10px 12px 16px", borderTop:"1px solid rgba(255,255,255,.06)", flexShrink:0 }}>
+      {/* Footer — tema + logout */}
+      <div style={{ padding:"10px 12px 16px", borderTop:"1px solid rgba(255,255,255,.06)", flexShrink:0, display:"flex", flexDirection:"column", gap:6 }}>
+        {/* Toggle tema */}
+        <button onClick={toggle} style={{
+          width:"100%", display:"flex", alignItems:"center", gap:10,
+          padding:"9px 12px", borderRadius:"var(--r-md)",
+          background:"rgba(255,255,255,.05)", border:"1px solid rgba(255,255,255,.1)",
+          cursor:"pointer", color:"#94a3b8", transition:"background-color .15s",
+        }}>
+          {theme === "dark"
+            ? <><Sun size={15} color="#fbbf24"/><span style={{ fontSize:13, fontWeight:600, color:"#fbbf24" }}>Modo claro</span></>
+            : <><Moon size={15} color="#93c5fd"/><span style={{ fontSize:13, fontWeight:600, color:"#93c5fd" }}>Modo oscuro</span></>
+          }
+        </button>
+
+        {/* Logout */}
         <button onClick={handleLogout} style={{
           width:"100%", display:"flex", alignItems:"center", gap:10,
           padding:"10px 12px", borderRadius:"var(--r-md)",
           background:"rgba(239,68,68,.08)", border:"1px solid rgba(239,68,68,.15)",
-          cursor:"pointer", color:"#f87171", transition:"all .15s",
+          cursor:"pointer", color:"#f87171", transition:"background-color .15s",
         }}>
           <LogOut size={15} /> <span style={{ fontSize:13, fontWeight:600 }}>Cerrar sesión</span>
         </button>

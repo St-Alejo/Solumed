@@ -4,7 +4,8 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { ToastProvider } from "@/components/ui/Toast";
-import { FlaskConical, LayoutDashboard, Building2, CreditCard, LogOut, ChevronRight, Menu, X } from "lucide-react";
+import { FlaskConical, LayoutDashboard, Building2, CreditCard, LogOut, ChevronRight, Menu, X, Sun, Moon } from "lucide-react";
+import { useTheme } from "@/lib/theme";
 
 const NAV = [
   { href:"/admin",           label:"Dashboard",   icon:LayoutDashboard },
@@ -14,6 +15,7 @@ const NAV = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { usuario, loading, logout } = useAuth();
+  const { theme, toggle } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
   const [abierto, setAbierto] = useState(false);
@@ -117,8 +119,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             })}
           </nav>
 
-          {/* Logout pegado al fondo — flexShrink:0 garantiza que nunca se corte */}
-          <div style={{ padding:"10px 12px 16px", borderTop:"1px solid rgba(255,255,255,.06)", flexShrink:0 }}>
+          {/* Footer — tema + logout */}
+          <div style={{ padding:"10px 12px 16px", borderTop:"1px solid rgba(255,255,255,.06)", flexShrink:0, display:"flex", flexDirection:"column", gap:6 }}>
+            <button onClick={toggle} style={{
+              width:"100%", display:"flex", alignItems:"center", gap:10,
+              padding:"9px 12px", borderRadius:"var(--r-md)",
+              background:"rgba(255,255,255,.05)", border:"1px solid rgba(255,255,255,.1)",
+              cursor:"pointer", color:"#94a3b8",
+            }}>
+              {theme === "dark"
+                ? <><Sun size={15} color="#fbbf24"/><span style={{ fontSize:13, fontWeight:600, color:"#fbbf24" }}>Modo claro</span></>
+                : <><Moon size={15} color="#93c5fd"/><span style={{ fontSize:13, fontWeight:600, color:"#93c5fd" }}>Modo oscuro</span></>
+              }
+            </button>
             <button onClick={handleLogout} style={{
               width:"100%", display:"flex", alignItems:"center", gap:10,
               padding:"10px 12px", borderRadius:"var(--r-md)",

@@ -46,6 +46,42 @@
   --font-mono: var(--font-mono, 'Fira Code', monospace);
 }
 
+/* ── Dark mode tokens ──────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:       #0f1117;
+  --surface:  #161b27;
+  --surface2: #1a2032;
+  --border:   #252d3d;
+  --border2:  #2e3a52;
+  --muted:    #3d4f6a;
+
+  --blue-l:   rgba(37,99,235,.22);
+  --blue-g:   rgba(37,99,235,.18);
+  --green-l:  rgba(22,163,74,.18);
+  --amber-l:  rgba(217,119,6,.18);
+  --red-l:    rgba(220,38,38,.18);
+  --orange-l: rgba(234,88,12,.18);
+  --gray-l:   rgba(107,114,128,.15);
+  --purple-l: rgba(124,58,237,.18);
+
+  --text:     #f1f5f9;
+  --text2:    #cbd5e1;
+  --text3:    #94a3b8;
+  --text4:    #64748b;
+
+  --sh-sm: 0 1px 4px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25);
+  --sh-md: 0 4px 16px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.3);
+  --sh-lg: 0 8px 32px rgba(0,0,0,.6);
+}
+
+[data-theme="dark"] .skel {
+  background: linear-gradient(90deg,#1e2635 25%,#252d40 50%,#1e2635 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #334155; }
+
 /* ── Reset ─────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
