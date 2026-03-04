@@ -248,7 +248,11 @@ def _parsear_formato_a(lineas: list[str]) -> list[dict]:
             en_tabla = True
             continue
         if en_tabla and RE_PIE.search(linea):
-            break
+            if producto_actual:
+                productos.append(producto_actual)
+                producto_actual = None
+            en_tabla = False  # resetear para siguiente página
+            continue
         if not en_tabla:
             continue
 
@@ -298,7 +302,8 @@ def _parsear_formato_b(lineas: list[str]) -> list[dict]:
             en_tabla = True
             continue
         if en_tabla and RE_PIE.search(linea):
-            break
+            en_tabla = False  # resetear para siguiente página
+            continue
         if not en_tabla:
             continue
 
@@ -382,7 +387,11 @@ def _parsear_distrimayor(lineas: list[str]) -> list[dict]:
             en_tabla = True
             continue
         if en_tabla and RE_PIE.search(linea):
-            break
+            if producto_actual:
+                productos.append(producto_actual)
+                producto_actual = None
+            en_tabla = False  # resetear para siguiente página
+            continue
         if not en_tabla:
             continue
 
