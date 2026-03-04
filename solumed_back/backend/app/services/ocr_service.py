@@ -78,7 +78,88 @@ def _extraer_texto_pdf_digital(ruta: str) -> list[str]:
     return lineas
 
 
-def _extraer_texto_ocr(ruta: str) -> list[str]:
+def _cargar_imagen(ruta: str):
+    """
+    Carga cualquier tipo de imagen como array numpy BGR para OpenCV.
+    Soporta: JPG, PNG, JPEG, WEBP, BMP, TIFF, GIF, SVG, HEIC, AVIF, etc.
+    """
+    import cv2
+    import numpy as np
+    from PIL import Image
+    import io
+
+    ext = Path(ruta).suffix.lower()
+
+    # SVG → rasterizar con cairosvg o inkscape
+    if ext == ".svg":
+        try:
+            import cairosvg
+            png_bytes = cairosvg.svg2png(url=ruta, scale=3.0)
+            img_pil = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+            return [cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)]
+        except ImportError:
+            pass
+        try:
+            import subprocess, tempfile
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                tmp_path = tmp.name
+            subprocess.run(
+                ["inkscape", ruta, "--export-filename", tmp_path,
+                 "--export-dpi", "300"],
+                capture_output=True, check=True
+            )
+            img = cv2.imread(tmp_path)
+            Path(tmp_path).unlink(missing_ok=True)
+            if img is not None:
+                return [img]
+        except Exception:
+            pass
+        # Fallback: leer como texto y convertir a imagen blanca
+        return []
+
+    # HEIC/HEIF
+    if ext in (".heic", ".heif"):
+        try:
+            import pillow_heif
+            pillow_heif.register_heif_opener()
+        except ImportError:
+            pass
+
+    # Todos los demás formatos: usar Pillow como intermediario
+    try:
+        img_pil = Image.open(ruta)
+        # Manejar imágenes con modo RGBA o P (paletted)
+        if img_pil.mode in ("RGBA", "P", "LA"):
+            bg = Image.new("RGB", img_pil.size, (255, 255, 255))
+            if img_pil.mode == "P":
+                img_pil = img_pil.convert("RGBA")
+            bg.paste(img_pil, mask=img_pil.split()[-1] if img_pil.mode in ("RGBA","LA") else None)
+            img_pil = bg
+        elif img_pil.mode != "RGB":
+            img_pil = img_pil.convert("RGB")
+
+        # Upscale si es muy pequeña (mejora OCR)
+        w, h = img_pil.size
+        if max(w, h) < 1500:
+            factor = 1500 / max(w, h)
+            img_pil = img_pil.resize((int(w * factor), int(h * factor)), Image.LANCZOS)
+
+        return [cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)]
+    except Exception as e:
+        raise RuntimeError(f"No se pudo cargar la imagen {ruta}: {e}")
+
+
+def _extraer_texto_ocr_imagen(ruta: str) -> list[str]:
+    """OCR directo sobre archivos de imagen (no PDF)."""
+    import numpy as np
+    imagenes = _cargar_imagen(ruta)
+    if not imagenes:
+        return []
+    return _ocr_sobre_imagenes(imagenes)
+
+
+def _extraer_texto_ocr_pdf(ruta: str) -> list[str]:
+    """OCR sobre PDF escaneado — convierte páginas a imágenes primero."""
     import cv2, numpy as np, pypdfium2 as pdfium
 
     doc = pdfium.PdfDocument(str(ruta))
@@ -88,7 +169,17 @@ def _extraer_texto_ocr(ruta: str) -> list[str]:
         arr = np.array(bitmap.to_pil())
         imagenes.append(cv2.cvtColor(arr, cv2.COLOR_RGB2BGR))
     doc.close()
+    return _ocr_sobre_imagenes(imagenes)
 
+
+# Alias para compatibilidad interna
+def _extraer_texto_ocr(ruta: str) -> list[str]:
+    return _extraer_texto_ocr_pdf(ruta)
+
+
+def _ocr_sobre_imagenes(imagenes: list) -> list[str]:
+    """Corre PaddleOCR sobre una lista de imágenes numpy y retorna líneas de texto."""
+    import numpy as np
     motor = _get_ocr()
     todas_lineas = []
 
@@ -656,16 +747,25 @@ async def procesar_factura(
     ext = Path(ruta).suffix.lower()
     lineas = []
 
+    EXTS_IMAGEN = {
+        ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif",
+        ".gif", ".svg", ".heic", ".heif", ".avif", ".jfif",
+    }
+
     if ext == ".pdf":
         if _pdf_tiene_texto(ruta):
             prog(15, "PDF digital — extrayendo texto...")
             lineas = _extraer_texto_pdf_digital(ruta)
         else:
             prog(15, "PDF escaneado — iniciando OCR (puede tardar)...")
-            lineas = _extraer_texto_ocr(ruta)
+            lineas = _extraer_texto_ocr_pdf(ruta)
+    elif ext in EXTS_IMAGEN:
+        prog(15, f"Imagen {ext.upper()} — iniciando OCR...")
+        lineas = _extraer_texto_ocr_imagen(ruta)
     else:
-        prog(15, "Imagen — iniciando OCR...")
-        lineas = _extraer_texto_ocr(ruta)
+        # Intentar como imagen por defecto
+        prog(15, "Archivo desconocido — intentando OCR como imagen...")
+        lineas = _extraer_texto_ocr_imagen(ruta)
 
     prog(45, f"{len(lineas)} líneas extraídas — identificando proveedor...")
 
