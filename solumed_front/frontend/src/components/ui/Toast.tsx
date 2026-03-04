@@ -21,7 +21,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{ toast }}>
       {children}
-      <div style={{ position:"fixed", bottom:24, right:24, display:"flex", flexDirection:"column", gap:10, zIndex:9999 }}>
+      <div className="toast-container" style={{ position:"fixed", bottom:24, right:24, display:"flex", flexDirection:"column", gap:10, zIndex:9999 }}>
         {toasts.map(t => (
           <div key={t.id} className="toast" style={{ background: colors[t.tipo] }}>
             {icons[t.tipo]}

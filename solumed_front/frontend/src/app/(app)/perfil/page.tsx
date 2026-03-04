@@ -28,7 +28,7 @@ export default function PerfilPage() {
   const dias = usuario?.licencia_vencimiento ? diasHasta(usuario.licencia_vencimiento) : null;
 
   return (
-    <div style={{ maxWidth:680 }}>
+    <div className="perfil-wrap" style={{ maxWidth:680 }}>
       <div style={{ marginBottom:24 }}>
         <h1 className="page-title">Mi Cuenta</h1>
         <p className="page-sub">Perfil y seguridad</p>

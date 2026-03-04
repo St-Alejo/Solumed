@@ -452,3 +452,94 @@ main { contain: layout style; }
     font-size: 12px !important;
   }
 }
+
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE ADICIONAL — filtros, tablas, toasts, inputs
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Filter bars (historial, invima) ────────────────────── */
+@media (max-width: 600px) {
+  .filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .filter-bar > div { width: 100% !important; }
+  .filter-bar input.inp,
+  .filter-bar select.inp { width: 100% !important; min-width: unset !important; max-width: unset !important; }
+  .filter-bar .btn { width: 100%; justify-content: center; }
+}
+
+/* ── Recepción — cabecera de factura en móvil ───────────── */
+@media (max-width: 700px) {
+  .rec-factura-hdr { flex-wrap: wrap !important; gap: 8px !important; }
+  .rec-factura-hdr input.inp { width: calc(50% - 4px) !important; flex: 1 1 120px !important; min-width: 0 !important; font-size: 12px !important; }
+}
+@media (max-width: 460px) {
+  .rec-factura-hdr input.inp { width: 100% !important; flex: 1 1 100% !important; }
+}
+
+/* ── INVIMA — ocultar columnas en tabla móvil ───────────── */
+@media (max-width: 700px) {
+  .invima-table th:nth-child(2), .invima-table td:nth-child(2),
+  .invima-table th:nth-child(5), .invima-table td:nth-child(5),
+  .invima-table th:nth-child(6), .invima-table td:nth-child(6),
+  .invima-table th:nth-child(7), .invima-table td:nth-child(7) { display: none !important; }
+}
+
+/* ── Toast — ajuste en móvil ────────────────────────────── */
+@media (max-width: 480px) {
+  .toast-container {
+    left: 12px !important;
+    right: 12px !important;
+    bottom: 16px !important;
+  }
+  .toast { max-width: unset !important; }
+}
+
+/* ── Info page — pasos en móvil muy pequeño ─────────────── */
+@media (max-width: 480px) {
+  .pasos-grid { grid-template-columns: 1fr !important; }
+}
+
+/* ── Botones de acción en móvil — stack vertical ────────── */
+@media (max-width: 480px) {
+  .actions-row { flex-direction: column !important; align-items: stretch !important; }
+  .actions-row .btn { justify-content: center; }
+}
+
+/* ── Page header row (título + botones) ─────────────────── */
+.page-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+@media (max-width: 480px) {
+  .page-header-row { flex-direction: column; }
+  .page-header-row > div:last-child { width: 100%; }
+  .page-header-row > div:last-child .btn { width: 100%; justify-content: center; }
+}
+
+/* ── Usuarios — plan info card flex wrap ────────────────── */
+@media (max-width: 540px) {
+  .plan-info-row { flex-direction: column !important; gap: 10px !important; }
+}
+
+/* ── Reportes — factura card ────────────────────────────── */
+@media (max-width: 540px) {
+  .reporte-card { flex-direction: column !important; align-items: flex-start !important; }
+  .reporte-card .btn { width: 100%; justify-content: center; }
+}
+
+/* ── Perfil — page max-width full on mobile ─────────────── */
+@media (max-width: 640px) {
+  .perfil-wrap { max-width: unset !important; }
+}
+
+/* ── Page title smaller on very small screens ───────────── */
+@media (max-width: 360px) {
+  .page-title { font-size: 18px !important; }
+  .page-sub   { font-size: 12px !important; }
+}

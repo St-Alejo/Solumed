@@ -89,7 +89,7 @@ export default function InvimaPage() {
       {/* Formulario */}
       <div className="card card-p" style={{ marginBottom: 20 }}>
         <form onSubmit={buscar}>
-          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div className="filter-bar" style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
 
             {/* Búsqueda */}
             <div style={{ flex: 1, minWidth: 260, display: "flex", flexDirection: "column", gap: 5 }}>
@@ -161,7 +161,7 @@ export default function InvimaPage() {
             </div>
           ) : (
             <div className="table-wrap">
-              <table>
+              <table className="invima-table">
                 <thead>
                   <tr>
                     <th>Producto</th>

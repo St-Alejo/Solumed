@@ -241,6 +241,10 @@ export default function Sidebar() {
           <p>Solu<span>Med</span></p>
         </div>
         <div className="topbar-right">
+          {/* Toggle tema en topbar móvil */}
+          <button onClick={toggle} className="topbar-hamburger" title={theme === "dark" ? "Modo claro" : "Modo oscuro"}>
+            {theme === "dark" ? <Sun size={16} color="#fbbf24"/> : <Moon size={16} color="#93c5fd"/>}
+          </button>
           {/* Cerrar sesión visible siempre en topbar móvil */}
           <button className="topbar-logout-btn" onClick={handleLogout}>
             <LogOut size={14}/> Salir

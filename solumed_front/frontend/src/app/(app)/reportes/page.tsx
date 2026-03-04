@@ -68,7 +68,7 @@ export default function ReportesPage() {
         ) : (
           <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
             {facturas.map(f => (
-              <div key={f.factura_id} className="card" style={{ padding:"16px 20px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
+              <div key={f.factura_id} className="card reporte-card" style={{ padding:"16px 20px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
                 <div style={{ width:42, height:42, borderRadius:10, background:"var(--blue-l)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                   <FileText size={18} color="var(--blue)"/>
                 </div>

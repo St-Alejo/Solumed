@@ -103,7 +103,7 @@ export default function UsuariosPage() {
       {/* Plan info */}
       {licencia && (
         <div className="card card-p" style={{ marginBottom:20 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+          <div className="plan-info-row" style={{ display:"flex", alignItems:"center", gap:16 }}>
             <ShieldCheck size={20} color="var(--blue)"/>
             <div style={{ flex:1 }}>
               <p style={{ fontWeight:700, fontSize:13 }}>Plan {licencia.plan} · {usadosSlots}/{maxSlots} usuarios activos</p>

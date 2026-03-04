@@ -432,13 +432,34 @@ export default function InfoPage() {
 
         /* RESPONSIVE */
         @media (max-width: 768px) {
-          .hero-content { grid-template-columns: 1fr; gap: 40px; }
+          .hero-content { grid-template-columns: 1fr; gap: 40px; padding: 60px 5vw; }
           .hero-mockup { display: none; }
           .stats-grid { grid-template-columns: repeat(2, 1fr); }
           .pasos-grid { grid-template-columns: 1fr 1fr; }
           .planes-grid { grid-template-columns: 1fr; }
           .plan-card.featured { transform: none; }
+          .porque-grid { grid-template-columns: 1fr 1fr; }
+          .planes-section { padding: 64px 5vw; }
+          .section { padding: 64px 0; }
+          .cta-section { padding: 64px 5vw; }
+          .section-title { font-size: clamp(24px, 5vw, 36px) !important; }
+        }
+        @media (max-width: 520px) {
+          .nav-btn-ghost { display: none; }
+          .nav-btn-primary { padding: 8px 14px; font-size: 13px; }
+          .hero h1 { font-size: clamp(28px, 8vw, 40px); }
+          .hero-sub { font-size: 15px; }
+          .btn-hero-primary, .btn-hero-wa { width: 100%; justify-content: center; padding: 13px 20px; font-size: 14px; }
+          .hero-btns { flex-direction: column; }
+          .pasos-grid { grid-template-columns: 1fr; }
           .porque-grid { grid-template-columns: 1fr; }
+          .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+          .stat-num { font-size: 36px !important; }
+          .plan-header { padding: 24px 20px 20px; }
+          .plan-body { padding: 0 20px 24px; }
+          .cta-btns { flex-direction: column; align-items: center; }
+          .cta-btns button { width: 100%; max-width: 360px; }
+          .paso-connector { display: none !important; }
         }
       `}</style>
 

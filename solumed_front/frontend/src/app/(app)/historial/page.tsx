@@ -85,7 +85,7 @@ export default function HistorialPage() {
         <>
           {/* Filtros */}
           <div className="card card-p" style={{ marginBottom:16 }}>
-            <div style={{ display:"flex", gap:12, alignItems:"flex-end", flexWrap:"wrap" }}>
+            <div className="filter-bar" style={{ display:"flex", gap:12, alignItems:"flex-end", flexWrap:"wrap" }}>
               <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
                 <label className="label">Desde</label>
                 <input className="inp" type="date" value={desde} onChange={e=>setDesde(e.target.value)} style={{ width:160 }}/>

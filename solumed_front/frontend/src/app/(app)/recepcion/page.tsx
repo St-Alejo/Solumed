@@ -284,7 +284,7 @@ export default function RecepcionPage() {
           return (
             <div key={item.id} className="card" style={{ marginBottom:16, overflow:"hidden" }}>
               {/* Cabecera de factura */}
-              <div style={{
+              <div className="rec-factura-hdr" style={{
                 display:"flex", alignItems:"center", gap:14,
                 padding:"14px 18px", cursor:"pointer",
                 background: item.estado === "guardado" ? "var(--green-l)" : "var(--surface)",
