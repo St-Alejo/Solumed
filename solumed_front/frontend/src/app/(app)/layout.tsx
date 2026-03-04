@@ -26,7 +26,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <ToastProvider>
       <div style={{ display:"flex" }}>
         <Sidebar />
-        <main style={{
+        <main className="app-main" style={{
           marginLeft:258, minHeight:"100vh", flex:1,
           padding:"28px 32px", background:"var(--bg)",
         }}>
