@@ -82,7 +82,7 @@ export default function UsuariosPage() {
 
   return (
     <div>
-      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:24 }}>
+      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:24, flexWrap:"wrap", gap:12 }}>
         <div>
           <h1 className="page-title">Usuarios</h1>
           <p className="page-sub">Gestión del equipo de tu droguería</p>
@@ -108,7 +108,7 @@ export default function UsuariosPage() {
             <div style={{ flex:1 }}>
               <p style={{ fontWeight:700, fontSize:13 }}>Plan {licencia.plan} · {usadosSlots}/{maxSlots} usuarios activos</p>
               <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:6 }}>
-                <div className="progress" style={{ width:200 }}>
+                <div className="progress" style={{ flex:1, maxWidth:200 }}>
                   <div className="progress-fill" style={{ width:`${Math.min(100, usadosSlots/maxSlots*100)}%`,
                     background: usadosSlots >= maxSlots ? "var(--red)" : undefined }}/>
                 </div>
@@ -139,18 +139,18 @@ export default function UsuariosPage() {
           ) : (
             <table>
               <thead>
-                <tr><th>Usuario</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Último acceso</th>{isAdmin&&<th></th>}</tr>
+                <tr><th>Usuario</th><th className="col-hide-mobile">Correo</th><th>Rol</th><th>Estado</th><th className="col-hide-mobile">Último acceso</th>{isAdmin&&<th></th>}</tr>
               </thead>
               <tbody>
                 {usuarios.map(u => (
                   <tr key={u.id}>
                     <td style={{ fontWeight:600 }}>{u.nombre}</td>
-                    <td style={{ fontSize:12, color:"var(--text3)" }}>{u.email}</td>
+                    <td style={{ fontSize:12, color:"var(--text3)" }} className="col-hide-mobile">{u.email}</td>
                     <td><span className={`badge ${colorRol(u.rol)}`}>{u.rol}</span></td>
                     <td><span className={`badge ${u.activo ? "badge-green":"badge-red"}`}>
                       {u.activo ? "Activo":"Inactivo"}
                     </span></td>
-                    <td style={{ fontSize:12, color:"var(--text4)" }}>{u.ultimo_login?.slice(0,16) || "Nunca"}</td>
+                    <td style={{ fontSize:12, color:"var(--text4)" }} className="col-hide-mobile">{u.ultimo_login?.slice(0,16) || "Nunca"}</td>
                     {isAdmin && (
                       <td>
                         {u.id !== usuario?.id && u.activo ? (

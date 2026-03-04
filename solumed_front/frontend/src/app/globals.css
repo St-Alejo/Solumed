@@ -352,3 +352,67 @@ main { contain: layout style; }
 @media (max-width: 480px) {
   .btn-block-mobile { width: 100%; justify-content: center; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE — Clases específicas por página
+   ══════════════════════════════════════════════════════════ */
+
+/* Dashboard admin */
+@media (max-width: 900px) {
+  .dash-stats  { grid-template-columns: repeat(2,1fr) !important; }
+  .dash-bottom { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 480px) {
+  .dash-stats  { grid-template-columns: 1fr 1fr !important; }
+}
+
+/* Licencias */
+@media (max-width: 700px) {
+  .lic-stats { grid-template-columns: 1fr !important; }
+}
+
+/* Recepción */
+@media (max-width: 860px) {
+  .rec-grid { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 640px) {
+  .prod-detail-grid { grid-template-columns: 1fr !important; }
+}
+
+/* INVIMA detail */
+@media (max-width: 640px) {
+  .invima-detail { grid-template-columns: 1fr 1fr !important; }
+}
+@media (max-width: 420px) {
+  .invima-detail { grid-template-columns: 1fr !important; }
+}
+
+/* Historial stats */
+@media (max-width: 700px) {
+  .hist-stats { grid-template-columns: repeat(2,1fr) !important; }
+}
+
+/* Perfil licencia */
+@media (max-width: 540px) {
+  .perfil-lic { grid-template-columns: 1fr 1fr !important; }
+}
+@media (max-width: 360px) {
+  .perfil-lic { grid-template-columns: 1fr !important; }
+}
+
+/* Historial — ocultar cols secundarias en tabla */
+@media (max-width: 700px) {
+  .col-hide-mobile { display: none !important; }
+}
+
+/* Botón exportar Excel — solo ícono en móvil muy pequeño */
+@media (max-width: 400px) {
+  .btn-text-hide { display: none; }
+}
+
+/* Recepción — info producto en móvil más compacta */
+@media (max-width: 500px) {
+  .rec-prod-info p:first-child {
+    font-size: 12px !important;
+  }
+}

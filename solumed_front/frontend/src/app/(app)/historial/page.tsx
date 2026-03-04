@@ -63,12 +63,12 @@ export default function HistorialPage() {
 
   return (
     <div>
-      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:24 }}>
+      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:24, flexWrap:"wrap", gap:12 }}>
         <div>
           <h1 className="page-title">Historial de Recepciones</h1>
           <p className="page-sub">{total} registros de tu droguería</p>
         </div>
-        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+        <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
           {["tabla","stats"].map(t => (
             <button key={t} onClick={() => setTab(t as any)}
               className={`btn btn-sm ${tab===t?"btn-primary":"btn-ghost"}`}>
@@ -172,7 +172,7 @@ export default function HistorialPage() {
       {tab === "stats" && stats && (
         <div className="anim-up">
           {/* Stat cards */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:16, marginBottom:20 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:16, marginBottom:20 }} className="hist-stats">
             {[
               { num:stats.total,      lbl:"Total recepciones",  color:"var(--blue)"  },
               { num:stats.aceptados,  lbl:"Aceptados",          color:"var(--green)" },

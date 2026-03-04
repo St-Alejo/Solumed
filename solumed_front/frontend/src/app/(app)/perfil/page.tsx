@@ -60,7 +60,7 @@ export default function PerfilPage() {
       {usuario?.licencia_plan && (
         <div className="card card-p" style={{ marginBottom:18 }}>
           <p className="section-title">Mi licencia</p>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginTop:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginTop:12 }} className="perfil-lic">
             <div>
               <p className="label">Plan</p>
               <p style={{ fontWeight:700, fontSize:16, color:"var(--blue)" }}>{planLabel(usuario.licencia_plan)}</p>

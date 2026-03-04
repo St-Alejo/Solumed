@@ -41,7 +41,7 @@ export default function LicenciasPage() {
       </div>
 
       {/* Resumen */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:24}}>
+      <div className="lic-stats" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:24}}>
         {[
           {num:cnt.activas, lbl:"Licencias activas",    color:"var(--green)", icon:<CheckCircle2 size={18}/>},
           {num:cnt.vencer,  lbl:"Por vencer (15 días)", color:"var(--amber)", icon:<AlertTriangle size={18}/>},
@@ -60,7 +60,7 @@ export default function LicenciasPage() {
       </div>
 
       {/* Filtros */}
-      <div style={{display:"flex",gap:8,marginBottom:16}}>
+      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
         {[["todas","Todas"],["activa","Activas"],["vencer","Por vencer"],["vencida","Vencidas"]].map(([v,l])=>(
           <button key={v} onClick={()=>setFiltro(v)} className={`btn btn-sm ${filtro===v?"btn-primary":"btn-ghost"}`}>{l}</button>
         ))}

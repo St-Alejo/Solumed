@@ -109,7 +109,7 @@ export default function InvimaPage() {
             {/* Tipo unificado */}
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               <label className="label">Tipo / Grupo</label>
-              <select className="inp" value={tipo} onChange={e => setTipo(e.target.value)} style={{ width: 210 }}>
+              <select className="inp" value={tipo} onChange={e => setTipo(e.target.value)} style={{ width: "100%", minWidth: 160, maxWidth: 210 }}>
                 {TIPOS.map(t => (
                   <option key={t.val} value={t.val}>{t.lbl}</option>
                 ))}
@@ -200,7 +200,7 @@ export default function InvimaPage() {
                       {expandido === i && (
                         <tr>
                           <td colSpan={8} style={{ background: "var(--surface2)", padding: 0 }}>
-                            <div className="anim-up" style={{ padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
+                            <div className="anim-up invima-detail" style={{ padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
                               {([
                                 ["Registro Sanitario", r.registro_sanitario],
                                 ["Estado",             r.estado],

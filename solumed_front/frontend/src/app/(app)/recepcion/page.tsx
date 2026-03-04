@@ -100,7 +100,7 @@ export default function RecepcionPage() {
       </div>
 
       {/* Grid principal */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, marginBottom:20 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, marginBottom:20 }} className="rec-grid">
 
         {/* Upload */}
         <div className="card card-p">
@@ -228,7 +228,7 @@ export default function RecepcionPage() {
                       Lote: {p.lote || "—"} · Vence: {p.vencimiento || "—"} · Cant: {p.cantidad}
                     </p>
                   </div>
-                  <span className={`badge ${colorEstadoInvima(p.estado_invima)}`}>{p.estado_invima || "—"}</span>
+                  <span className={`badge ${colorEstadoInvima(p.estado_invima)} col-hide-mobile`}>{p.estado_invima || "—"}</span>
                   <span className={`badge ${colorCumple(p.cumple)}`}>{p.cumple}</span>
                   {expandido === i ? <ChevronUp size={16} color="var(--text4)"/> : <ChevronDown size={16} color="var(--text4)"/>}
                 </div>
@@ -236,7 +236,7 @@ export default function RecepcionPage() {
                 {/* Detalle expandido */}
                 {expandido === i && (
                   <div className="anim-up" style={{ padding:"16px 18px", borderTop:"1px solid var(--border)", background:"var(--surface)" }}>
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:20 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:20 }} className="prod-detail-grid">
 
                       {/* Col 1 — Factura */}
                       <div>
