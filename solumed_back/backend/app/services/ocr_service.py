@@ -177,26 +177,58 @@ RE_NO_ES_NOMBRE = re.compile(
     re.IGNORECASE
 )
 
-# Un nombre de medicamento válido: tiene letras, puede tener números/paréntesis
-RE_ES_NOMBRE = re.compile(
-    r'^[A-ZÁÉÍÓÚÑ][A-Za-záéíóúñ0-9\s\(\)\.\-\+\/x%,]{4,}$'
+# Patrón farmacéutico: la línea DEBE tener alguno de estos para ser medicamento
+RE_PATRON_FARMACEUTICO = re.compile(
+    r'\b(\d+\s*MG|\d+\s*ML|\d+\s*MCG|\d+\s*UI|\d+\s*GR|' 
+    r'TABLETAS?|CAPSULAS?|COMPRIMIDOS?|AMPOLLAS?|JERINGAS?|SUSPENSIONS?|JARABES?|' 
+    r'GRAGEAS?|SOLUCIONS?|SPRAYS?|GOTAS|PARCHES?|POLVOS?|GRANULADOS?|' 
+    r'COLIRIOS?|SUPOSITORIOS?|OVULOS?|INHALADORES?|NEBULIZADORES?|' 
+    r'X\s*\d+\s*(CAP|TAB|COMP|AMP|GRA|SOBRES?|ML|MG|UND)|' 
+    r'\d+\s*X\s*\d+\s*(CAP|TAB|COMP|GRA|ML|SOBRES?)?|' 
+    r'LST|REGULADO|P\.ESP|PLAN SEMILLA)\b',
+    re.IGNORECASE
+)
+
+# Palabras clave administrativas que indican que la línea NO es un medicamento
+RE_LINEA_ADMIN = re.compile(
+    r'\b(SAS|S\.A\.S|LTDA|S\.A\b|NIT\b|RUT\b|' 
+    r'CALLE|CARRERA|CRA\b|CLL\b|AVENIDA|AV\.|' 
+    r'COLOMBIA|BOGOTA|MEDELLIN|CALI|PASTO|BARRANQUILLA|BUCARAMANGA|' 
+    r'IVA\b|IMPUESTO|TARIFA|ACTIVIDAD ECONOMICA|\bICA\b|' 
+    r'LETRA DE CAMBIO|ASIMILA|EFECTOS|PAGARE|' 
+    r'FACTURA\b|REMISION|PEDIDO|HOJA\b|PAGINA\b|' 
+    r'CODIGO CLIENTE|VENCIMIENTO No\.|PLAZO\b|ZONA\b|' 
+    r'VERIFIQUE|CUFE|COPIA|ORIGINAL|' 
+    r'FIRMA|REGENTE|QUIMICO FARMACEUTICO|DIRECTOR TECNICO|' 
+    r'VENDEDOR|BODEGA|TRANSPORTE|FLETE|' 
+    r'SUBTOTAL|DESCUENTO|RETENCION|\bRTE\b|ANTICIPO)',
+    re.IGNORECASE
 )
 
 
 def _es_nombre_medicamento(linea: str) -> bool:
-    """Determina si una línea es probablemente un nombre de medicamento."""
+    """
+    Determina si una línea es probablemente un nombre de medicamento.
+    Usa doble filtro: 
+    1. DEBE tener patrón farmacéutico (mg, ml, tabletas, grageas, X30 CAP, etc.)
+    2. NO debe tener palabras administrativas (SAS, NIT, IVA, CARRERA, etc.)
+    """
+    if len(linea) < 5:
+        return False
     if RE_NO_ES_NOMBRE.match(linea):
         return False
     if RE_OBSEQUIO.search(linea):
         return False
-    # Tiene letras iniciales mayúsculas, al menos 5 chars, sin muchos números sueltos
-    if len(linea) < 5:
+    if RE_LINEA_ADMIN.search(linea):
         return False
-    # Si tiene más de 40% dígitos probablemente es datos, no nombre
+    # Debe contener patrón farmacéutico reconocible
+    if not RE_PATRON_FARMACEUTICO.search(linea):
+        return False
+    # Si tiene más de 50% dígitos probablemente es datos numéricos
     digits = sum(c.isdigit() for c in linea)
-    if digits / len(linea) > 0.4:
+    if digits / len(linea) > 0.5:
         return False
-    return bool(re.match(r'^[A-ZÁÉÍÓÚÑ]', linea))
+    return bool(re.match(r'^[A-ZÁÉÍÓÚÑa-z]', linea))
 
 
 # ── Parsers por formato ────────────────────────────────────────
