@@ -38,7 +38,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <ToastProvider>
       <div style={{ display:"flex" }}>
-        {/* Sidebar Admin */}
         {/* Topbar móvil admin */}
         <div className="topbar-mobile" style={{ background:"#0a0f1a" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -47,20 +46,35 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
             <span style={{ color:"#f1f5f9",fontWeight:800,fontSize:14 }}>SoluMed Admin</span>
           </div>
-          <button className="hamburger" onClick={()=>setAbierto(true)} aria-label="Abrir menú">
-            <span/><span/><span/>
-          </button>
+          {/* Salir siempre visible en móvil */}
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <button onClick={handleLogout} style={{
+              display:"flex", alignItems:"center", gap:6,
+              padding:"7px 12px", borderRadius:8,
+              background:"rgba(239,68,68,.12)", border:"1px solid rgba(239,68,68,.2)",
+              color:"#f87171", fontSize:13, fontWeight:600, cursor:"pointer",
+            }}>
+              <LogOut size={14}/> Salir
+            </button>
+            <button onClick={()=>setAbierto(true)} style={{
+              width:36, height:36, borderRadius:8, cursor:"pointer",
+              background:"rgba(255,255,255,.06)", border:"1px solid rgba(255,255,255,.1)",
+              display:"flex", alignItems:"center", justifyContent:"center", color:"#94a3b8",
+            }}>
+              <Menu size={18}/>
+            </button>
+          </div>
         </div>
+
         {abierto && <div className="sidebar-overlay open" onClick={()=>setAbierto(false)}/>}
+
         <aside className={`admin-sidebar${abierto?" open":""}`} style={{
           position:"fixed", left:0, top:0, width:240, height:"100vh",
           background:"#0a0f1a", borderRight:"1px solid rgba(255,255,255,.06)",
-          display:"flex", flexDirection:"column", zIndex:50, overflowY:"auto",
+          display:"flex", flexDirection:"column", zIndex:50,
         }}>
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"8px 12px 0" }}>
-            <button onClick={()=>setAbierto(false)} style={{ background:"none",border:"none",cursor:"pointer",color:"#475569",padding:4,display:"flex" }}><X size={16}/></button>
-          </div>
-          <div style={{ padding:"20px 16px 14px", borderBottom:"1px solid rgba(255,255,255,.06)" }}>
+          {/* Header con X */}
+          <div style={{ padding:"20px 16px 14px", borderBottom:"1px solid rgba(255,255,255,.06)", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
             <div style={{ display:"flex", alignItems:"center", gap:11 }}>
               <div style={{ width:36,height:36,borderRadius:9,background:"linear-gradient(135deg,#7c3aed,#a855f7)",display:"flex",alignItems:"center",justifyContent:"center" }}>
                 <FlaskConical size={16} color="#fff"/>
@@ -70,6 +84,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <p style={{ color:"#475569",fontSize:10 }}>Panel superadmin</p>
               </div>
             </div>
+            <button onClick={()=>setAbierto(false)} style={{ background:"none",border:"none",cursor:"pointer",color:"#475569",padding:4,display:"flex" }}>
+              <X size={18}/>
+            </button>
           </div>
 
           <div style={{ padding:"10px 10px 4px" }}>
@@ -79,7 +96,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </div>
 
-          <nav style={{ flex:1,padding:"4px 10px",display:"flex",flexDirection:"column",gap:2 }}>
+          <nav style={{ flex:1, padding:"4px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
             {NAV.map(item => {
               const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
               const Icon = item.icon;
@@ -100,12 +117,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             })}
           </nav>
 
-          <div style={{ padding:"10px 12px 16px",borderTop:"1px solid rgba(255,255,255,.06)" }}>
+          {/* Logout pegado al fondo — flexShrink:0 garantiza que nunca se corte */}
+          <div style={{ padding:"10px 12px 16px", borderTop:"1px solid rgba(255,255,255,.06)", flexShrink:0 }}>
             <button onClick={handleLogout} style={{
-              width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",
-              borderRadius:"var(--r-md)",background:"none",border:"none",cursor:"pointer",color:"#475569",
+              width:"100%", display:"flex", alignItems:"center", gap:10,
+              padding:"10px 12px", borderRadius:"var(--r-md)",
+              background:"rgba(239,68,68,.08)", border:"1px solid rgba(239,68,68,.15)",
+              cursor:"pointer", color:"#f87171",
             }}>
-              <LogOut size={15}/><span style={{ fontSize:13 }}>Cerrar sesión</span>
+              <LogOut size={15}/><span style={{ fontSize:13, fontWeight:600 }}>Cerrar sesión</span>
             </button>
           </div>
         </aside>
