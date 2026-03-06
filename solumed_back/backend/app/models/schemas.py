@@ -3,8 +3,8 @@ app/models/schemas.py
 =====================
 Modelos Pydantic para validación de request/response.
 """
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, Union
 
 
 # ══════════════════════════════════════════════════════
@@ -57,8 +57,8 @@ class DrogueriaUpdate(BaseModel):
 class LicenciaCreate(BaseModel):
     drogeria_id: int
     plan: str = Field("mensual", pattern="^(mensual|trimestral|semestral|anual|trial)$")
-    inicio: str        # formato YYYY-MM-DD
-    vencimiento: str   # formato YYYY-MM-DD
+    inicio: str
+    vencimiento: str
     max_usuarios: int = Field(5, ge=1, le=100)
     precio_cop: int = Field(0, ge=0)
     notas: str = ""
@@ -80,12 +80,14 @@ class UsuarioCreate(BaseModel):
 # ══════════════════════════════════════════════════════
 
 class ProductoRecepcion(BaseModel):
-    # Datos de la factura (extraídos por OCR)
+    model_config = {"extra": "ignore"}  # ignorar campos extra del frontend
+
+    # Datos de la factura
     codigo_producto:    str = ""
     nombre_producto:    str = ""
     lote:               str = ""
     vencimiento:        str = ""
-    cantidad:           int = 0
+    cantidad:           Union[int, str, None] = 0
     num_muestras:       str = ""
 
     # Datos del producto
@@ -96,7 +98,7 @@ class ProductoRecepcion(BaseModel):
     temperatura:        str = "15-30°C"
     fecha_ingreso:      str = ""
 
-    # Datos INVIMA (cruzados con la API)
+    # Datos INVIMA
     registro_sanitario: str = ""
     estado_invima:      str = ""
     laboratorio:        str = ""
@@ -108,8 +110,18 @@ class ProductoRecepcion(BaseModel):
     cumple:             str = "Acepta"
     observaciones:      str = ""
 
+    @field_validator("cantidad", mode="before")
+    @classmethod
+    def parsear_cantidad(cls, v):
+        try:
+            return int(v or 0)
+        except (ValueError, TypeError):
+            return 0
+
 
 class GuardarRecepcionRequest(BaseModel):
-    factura_id: str = Field(..., min_length=1, description="Número de factura")
+    factura_id: str = ""          # puede venir vacío si el usuario no lo llenó
     proveedor:  str = ""
     productos:  list[ProductoRecepcion]
+
+    model_config = {"extra": "ignore"}  # ignorar campos extra del frontend

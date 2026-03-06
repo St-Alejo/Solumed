@@ -70,6 +70,10 @@ async def guardar(
     body: GuardarRecepcionRequest,
     u: dict = Depends(require_licencia_activa),
 ):
+    import logging
+    logging.warning(f"GUARDAR body keys: factura_id={body.factura_id} proveedor={body.proveedor} productos={len(body.productos)}")
+    if body.productos:
+        logging.warning(f"GUARDAR primer producto keys: {list(body.productos[0].model_dump().keys())}")
     drogeria_id = u.get("drogeria_id")
     if not drogeria_id:
         raise HTTPException(400, "El superadmin no puede guardar recepciones. Usa una cuenta de droguería.")

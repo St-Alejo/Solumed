@@ -512,8 +512,8 @@ def obtener_historial(drogeria_id: int, desde: str = None, hasta: str = None,
                       por_pagina: int = 50) -> dict:
     base   = "FROM historial WHERE drogeria_id=?"
     params: list = [drogeria_id]
-    if desde:     base += " AND fecha_proceso>=?"; params.append(desde)
-    if hasta:     base += " AND fecha_proceso<=?"; params.append(hasta)
+    if desde:     base += " AND fecha_proceso::date>=?"; params.append(desde)
+    if hasta:     base += " AND fecha_proceso::date<=?"; params.append(hasta)
     if factura_id: base += " AND factura_id LIKE ?"; params.append(f"%{factura_id}%")
 
     con = get_conn()
@@ -540,7 +540,7 @@ def obtener_historial(drogeria_id: int, desde: str = None, hasta: str = None,
 def estadisticas_drogeria(drogeria_id: int) -> dict:
     d30 = _adapt_interval(30, "-")
     rows = _fetch_all(
-        f"SELECT cumple, defectos, fecha_proceso FROM historial WHERE drogeria_id=? AND fecha_proceso >= {d30}",
+        f"SELECT cumple, defectos, fecha_proceso FROM historial WHERE drogeria_id=? AND fecha_proceso::date >= {d30}",
         (drogeria_id,)
     )
     total_all = _fetch_one("SELECT COUNT(*) AS n FROM historial WHERE drogeria_id=?", (drogeria_id,))
