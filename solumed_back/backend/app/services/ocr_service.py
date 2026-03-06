@@ -455,71 +455,98 @@ def _parsear_distrimayor(lineas: list[str]) -> list[dict]:
 
 def _parsear_distrimayor_scan(lineas: list[str]) -> list[dict]:
     """
-    Formato Distrimayor factura IMPRESA/ESCANEADA (formato antiguo).
-    Columnas: Codigo | Descripcion | V: YYYY.MM | Lote | Cantidad | Iva | Total
+    Formato Distrimayor factura IMPRESA/ESCANEADA.
+    La fecha aparece como "V: 2028.01" o "V; 2028.01" (Tesseract confunde : y ;)
+    antes del lote. El codigo puede estar ausente o mezclado con | por OCR.
     Linea siguiente: CODBARRA R.INVIMA: XXXX CUM: XXXX
-    Diferencia vs electronica: fecha aparece como "V: 2028.01" antes del lote.
     """
-    RE_DIST_SCAN = re.compile(
-        r'^(\ *\d{4,7})\s+'
-        r'(.+?)\s+'
-        r'V:\s*(\d{4}[.\-]\d{2})\s+'
-        r'(\S+)\s+'
-        r'(\d{1,4})\s+'
-        r'[\d,. ]+$'
-    )
-    RE_RINVIMA = re.compile(
-        r'R\.INVIMA:\s*([A-Z0-9\-]+)\s+CUM:\s*([A-Z0-9\-]+)',
-        re.IGNORECASE
-    )
-    RE_PIE_SCAN = re.compile(
-        r'TOTAL A PAGAR|VALOR EXCLUIDO|SON:|PD/ID|FIRMA Y SELLO',
-        re.IGNORECASE
-    )
+    RE_VENCE    = re.compile(r'V[;:]\s*(\d{4}[.\-]\d{2})', re.IGNORECASE)
+    RE_LOTE_POS = re.compile(r'V[;:]\s*\d{4}[.\-]\d{2}\s+(\S+)', re.IGNORECASE)
+    RE_RINVIMA  = re.compile(r'R\.INVIMA[;:]\s*([A-Z0-9\-]+)', re.IGNORECASE)
+    RE_COD_IZQ  = re.compile(r'^[\|:]?\s*(\d{4,7})\s*[\|]?\s+(.+)')
+    RE_PIE_SCAN = re.compile(r'SON:|TOTAL A PAGAR|VALOR EXCLUIDO|PD/ID|FIRMA Y SELLO', re.IGNORECASE)
+    RE_CAB_SCAN = re.compile(r'[Cc][o\xf3]digo|CODIGO', re.IGNORECASE)
 
     productos = []
-    actual = None
-    en_tabla = False
+    actual    = None
+    en_tabla  = False
 
     for linea in lineas:
         linea = linea.strip()
         if not linea:
             continue
-        if re.search(r'C[o\xf3]digo.+Descripci[o\xf3]n|CODIGO.+DESCRIPCION', linea, re.IGNORECASE):
+
+        if RE_CAB_SCAN.search(linea) and ('Descripci' in linea or 'Lote' in linea or 'DESCRIPCION' in linea.upper()):
             en_tabla = True
             continue
+
         if en_tabla and RE_PIE_SCAN.search(linea):
             if actual:
                 productos.append(actual)
                 actual = None
             en_tabla = False
             continue
+
         if not en_tabla:
             continue
 
-        # Registro sanitario en linea siguiente
+        # R.INVIMA en linea siguiente
         m_rs = RE_RINVIMA.search(linea)
-        if m_rs and actual:
-            actual['registro_sanitario_factura'] = f"INVIMA {m_rs.group(1)}"
+        if m_rs and actual and not actual['registro_sanitario_factura']:
+            rs = re.sub(r'\s+', '', m_rs.group(1))
+            actual['registro_sanitario_factura'] = f"INVIMA {rs.upper()}"
             continue
 
-        # Linea de producto
-        m = RE_DIST_SCAN.match(linea)
-        if m:
-            if actual:
-                productos.append(actual)
-            if RE_OBSEQUIO.search(m.group(2)):
-                actual = None
-                continue
-            fecha = m.group(3).replace('.', '-')
-            actual = {
-                'codigo_producto':            m.group(1).strip(),
-                'nombre_producto':            m.group(2).strip(),
-                'vencimiento':                fecha,
-                'lote':                       m.group(4).upper(),
-                'cantidad':                   int(m.group(5)),
-                'registro_sanitario_factura': '',
-            }
+        # Linea de producto: contiene V: YYYY.MM
+        m_v = RE_VENCE.search(linea)
+        if not m_v:
+            continue
+
+        if actual:
+            productos.append(actual)
+
+        fecha = m_v.group(1).replace('.', '-')
+
+        # Lote: token inmediatamente despues de la fecha
+        lote = ""
+        m_lote = RE_LOTE_POS.search(linea)
+        if m_lote:
+            lote = re.sub(r'[|!\'"`\s]', '', m_lote.group(1))
+
+        # Nombre: todo a la izquierda de V:
+        idx_v = re.search(r'V[;:]', linea, re.IGNORECASE).start()
+        parte_izq = linea[:idx_v].strip()
+
+        codigo = ""
+        nombre = parte_izq
+        m_cod = RE_COD_IZQ.match(parte_izq)
+        if m_cod:
+            codigo = m_cod.group(1)
+            nombre = m_cod.group(2).strip('| ')
+        else:
+            nombre = re.sub(r'^[\|:\s]+', '', parte_izq).strip()
+
+        if RE_OBSEQUIO.search(nombre):
+            actual = None
+            continue
+
+        # Cantidad: numero solitario antes de los precios al final
+        cant = 1
+        m_cant = re.search(r'\s(\d{1,4})\s+[\d,]+\s*$', linea)
+        if m_cant:
+            try:
+                cant = int(m_cant.group(1))
+            except Exception:
+                cant = 1
+
+        actual = {
+            'codigo_producto':            codigo,
+            'nombre_producto':            nombre,
+            'vencimiento':                fecha,
+            'lote':                       lote.upper(),
+            'cantidad':                   cant,
+            'registro_sanitario_factura': '',
+        }
 
     if actual:
         productos.append(actual)
