@@ -219,6 +219,29 @@ def inicializar():
             except Exception:
                 pass
 
+        # ── condiciones ambientales ───────────────────────────
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS condiciones_ambientales (
+                id              {text_pk},
+                drogeria_id     INTEGER NOT NULL REFERENCES drogerias(id),
+                usuario_id      INTEGER REFERENCES usuarios(id),
+                fecha           TEXT NOT NULL,
+                temperatura_am  REAL,
+                temperatura_pm  REAL,
+                humedad_am      REAL,
+                humedad_pm      REAL,
+                firma_am        TEXT,
+                firma_pm        TEXT,
+                UNIQUE(drogeria_id, fecha)
+            )
+        """)
+
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_conda_fecha ON condiciones_ambientales(fecha)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_conda_drog ON condiciones_ambientales(drogeria_id)")
+        except Exception:
+            pass
+
         con.commit()
 
         # ── Superadmin por defecto ─────────────────────────────
@@ -566,6 +589,55 @@ def estadisticas_drogeria(drogeria_id: int) -> dict:
         "ultimos_30_dias": ultimos_30,
     }
 
+
+# ══════════════════════════════════════════════════════════════
+#  CONDICIONES AMBIENTALES
+# ══════════════════════════════════════════════════════════════
+
+def guardar_condiciones_dia(drogeria_id: int, usuario_id: int,
+                            fecha: str, temperatura_am: Optional[float] = None,
+                            temperatura_pm: Optional[float] = None,
+                            humedad_am: Optional[float] = None,
+                            humedad_pm: Optional[float] = None,
+                            firma_am: Optional[str] = None,
+                            firma_pm: Optional[str] = None) -> int:
+    """Inserta o actualiza el registro de condiciones para un día en particular."""
+    existe = _fetch_one("SELECT id FROM condiciones_ambientales WHERE drogeria_id=? AND fecha=?", (drogeria_id, fecha))
+    
+    if existe:
+        return _execute("""
+            UPDATE condiciones_ambientales SET
+                usuario_id = COALESCE(?, usuario_id),
+                temperatura_am = COALESCE(?, temperatura_am),
+                temperatura_pm = COALESCE(?, temperatura_pm),
+                humedad_am = COALESCE(?, humedad_am),
+                humedad_pm = COALESCE(?, humedad_pm),
+                firma_am = COALESCE(?, firma_am),
+                firma_pm = COALESCE(?, firma_pm)
+            WHERE id = ?
+        """, (usuario_id, temperatura_am, temperatura_pm, humedad_am, humedad_pm, firma_am, firma_pm, existe["id"]))
+    else:
+        return _execute("""
+            INSERT INTO condiciones_ambientales (
+                drogeria_id, usuario_id, fecha, temperatura_am, temperatura_pm,
+                humedad_am, humedad_pm, firma_am, firma_pm
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (drogeria_id, usuario_id, fecha, temperatura_am, temperatura_pm, humedad_am, humedad_pm, firma_am, firma_pm))
+
+
+def obtener_condiciones_mes(drogeria_id: int, anio_mes: str) -> list[dict]:
+    """Retorna los registros de un mes específico (YYYY-MM)."""
+    return _fetch_all("""
+        SELECT * FROM condiciones_ambientales
+        WHERE drogeria_id = ? AND fecha LIKE ?
+        ORDER BY fecha ASC
+    """, (drogeria_id, f"{anio_mes}-%"))
+
+def verificar_alerta_condiciones(drogeria_id: int) -> bool:
+    """Retorna True si falta el registro del día actual."""
+    hoy = date.today().isoformat()
+    registro = _fetch_one("SELECT * FROM condiciones_ambientales WHERE drogeria_id=? AND fecha=?", (drogeria_id, hoy))
+    return registro is None
 
 # ══════════════════════════════════════════════════════════════
 #  DASHBOARD GLOBAL (superadmin)

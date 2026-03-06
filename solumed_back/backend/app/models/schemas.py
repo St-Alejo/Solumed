@@ -125,3 +125,19 @@ class GuardarRecepcionRequest(BaseModel):
     productos:  list[ProductoRecepcion]
 
     model_config = {"extra": "ignore"}  # ignorar campos extra del frontend
+
+# ══════════════════════════════════════════════════════
+#  CONDICIONES AMBIENTALES
+# ══════════════════════════════════════════════════════
+
+class CondicionAmbientalBase(BaseModel):
+    fecha: str
+    temperatura_am: Optional[float] = None
+    temperatura_pm: Optional[float] = None
+    humedad_am: Optional[float] = None
+    humedad_pm: Optional[float] = None
+    firma_am: Optional[str] = None
+    firma_pm: Optional[str] = None
+
+class CondicionAmbientalCreate(CondicionAmbientalBase):
+    pass

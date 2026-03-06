@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import inicializar
 
-from app.routers import auth, admin, facturas, invima, historial, usuarios
+from app.routers import auth, admin, facturas, invima, historial, usuarios, condiciones
 
 # ── Aplicación FastAPI ────────────────────────────────────────
 app = FastAPI(
@@ -62,6 +62,7 @@ app.include_router(facturas.router,  prefix="/api/facturas",  tags=["📄 Factur
 app.include_router(invima.router,    prefix="/api/invima",    tags=["💊 INVIMA API"])
 app.include_router(historial.router, prefix="/api/historial", tags=["📋 Historial"])
 app.include_router(usuarios.router,  prefix="/api/usuarios",  tags=["👥 Usuarios"])
+app.include_router(condiciones.router, prefix="/api/condiciones", tags=["🌡️ Condiciones"])
 
 
 # ── Eventos ───────────────────────────────────────────────────
