@@ -69,13 +69,20 @@ def _extraer_productos_con_claude(ruta: str) -> list[dict]:
             paginas = [page.render(scale=2.0).to_pil() for page in doc]
             doc.close()
         for pag in paginas:
+            # Reducir si es muy grande (limite API ~5MB por imagen)
+            w, h = pag.size
+            if w > 1600 or h > 2200:
+                pag = pag.resize((min(w, 1600), min(h, 2200)), PILImage.LANCZOS)
             buf = io.BytesIO()
-            pag.save(buf, format="JPEG", quality=85)
+            pag.save(buf, format="JPEG", quality=80)
             imagenes_b64.append(base64.standard_b64encode(buf.getvalue()).decode())
     else:
         img = PILImage.open(str(ruta))
+        w, h = img.size
+        if w > 1600 or h > 2200:
+            img = img.resize((min(w, 1600), min(h, 2200)), PILImage.LANCZOS)
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=85)
+        img.save(buf, format="JPEG", quality=80)
         imagenes_b64.append(base64.standard_b64encode(buf.getvalue()).decode())
 
     # Construir bloques de contenido (una imagen por pagina)
@@ -123,24 +130,35 @@ Reglas estrictas:
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY no configurada en variables de entorno")
 
-    resp = httpx.post(
-        "https://api.anthropic.com/v1/messages",
-        json=payload,
-        headers={
-            "Content-Type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-        },
-        timeout=60.0
-    )
-    if resp.status_code != 200:
-        # Mostrar error completo para diagnóstico
+    try:
+        resp = httpx.post(
+            "https://api.anthropic.com/v1/messages",
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            },
+            timeout=120.0
+        )
+    except httpx.HTTPStatusError as e:
+        # httpx lanza esto cuando el servidor devuelve 4xx/5xx
         try:
-            err = resp.json()
-            msg = err.get("error", {}).get("message", resp.text[:300])
+            msg = e.response.json().get("error", {}).get("message", e.response.text[:400])
         except Exception:
-            msg = resp.text[:300]
-        raise RuntimeError(f"Claude API {resp.status_code}: {msg}")
+            msg = str(e)
+        raise RuntimeError(f"Claude API {e.response.status_code}: {msg}")
+    except Exception as e:
+        raise RuntimeError(f"Error de conexion a Claude API: {e}")
+
+    if resp.status_code != 200:
+        try:
+            err_body = resp.json()
+            msg = err_body.get("error", {}).get("message", resp.text[:500])
+        except Exception:
+            msg = resp.text[:500]
+        raise RuntimeError(f"Claude API error {resp.status_code}: {msg}")
+
     data = resp.json()
     texto = data["content"][0]["text"].strip()
 
@@ -519,7 +537,7 @@ async def procesar_factura(
             "lote":               p.get("lote", ""),
             "vencimiento":        p.get("vencimiento", ""),
             "cantidad":           p.get("cantidad", 1),
-            "num_muestras":       p.get("cantidad", 1),
+            "num_muestras":       "",
             # Datos INVIMA (nombres exactos del schema ProductoRecepcion)
             "registro_sanitario": datos_invima.get("registro_sanitario", p.get("registro_sanitario_factura", "")),
             "estado_invima":      datos_invima.get("estado", ""),
@@ -529,7 +547,7 @@ async def procesar_factura(
             "concentracion":      datos_invima.get("concentracion", ""),
             "expediente":         datos_invima.get("expediente", ""),
             # Evaluacion tecnica
-            "temperatura":        "30°C",
+            "temperatura":        "15-30°C",
             "defectos":           "Ninguno",
             "cumple":             "Acepta",
             "observaciones":      "",
