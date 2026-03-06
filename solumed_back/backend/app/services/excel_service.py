@@ -54,7 +54,6 @@ COLUMNAS = [
     ("Nombre Producto / Presentacion",      32),
     ("Concentración",        14),
     ("Forma Farmacéutica",   20),
-    ("Presentación",         32),
     ("Lote",                 14),
     ("Vencimiento Prod.",    16),
     ("Cantidad",             10),
