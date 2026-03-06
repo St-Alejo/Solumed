@@ -5,37 +5,23 @@ Procesamiento OCR de facturas de medicamentos.
 
 Flujo:
   1. Detecta si el PDF es digital (texto embebido) o escaneado
-  2. Extrae texto con pypdfium2 (digital) o PaddleOCR (escaneado)
-  3. Parsea las líneas buscando productos con múltiples formatos de factura
+  2. Extrae texto con pypdfium2 (digital) o Tesseract OCR (escaneado)
+  3. Parsea las lineas buscando productos con multiples formatos de factura
   4. Cruza cada producto con la API del INVIMA (datos.gov.co)
+
+Motor OCR: Tesseract (liviano, incluido en Dockerfile).
+  Fallback: PaddleOCR si esta instalado (mas preciso, requiere >4GB RAM).
 """
 import re
 import os
 from pathlib import Path
 from typing import Callable, Optional
 
-os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
 
-_ocr_engine = None
-
-
-def _get_ocr():
-    global _ocr_engine
-    if _ocr_engine is None:
-        try:
-            from paddleocr import PaddleOCR
-            _ocr_engine = PaddleOCR(use_angle_cls=True, lang="es", show_log=False)
-        except ImportError:
-            raise RuntimeError(
-                "PaddleOCR no está instalado. Para PDFs escaneados instala: "
-                "paddleocr paddlepaddle opencv-python-headless"
-            )
-    return _ocr_engine
-
-
-# ── Extracción de texto ────────────────────────────────────────
+# Extraccion de texto
 
 def _pdf_tiene_texto(ruta: str) -> bool:
+    """Retorna True si el PDF tiene texto digital embebido."""
     try:
         import pypdfium2 as pdfium
         doc = pdfium.PdfDocument(str(ruta))
@@ -49,6 +35,7 @@ def _pdf_tiene_texto(ruta: str) -> bool:
 
 
 def _extraer_texto_pdf_digital(ruta: str) -> list[str]:
+    """Extrae texto de PDF digital con pypdfium2 (rapido, sin IA)."""
     import pypdfium2 as pdfium
     doc = pdfium.PdfDocument(str(ruta))
     lineas = []
@@ -62,60 +49,87 @@ def _extraer_texto_pdf_digital(ruta: str) -> list[str]:
 
 
 def _extraer_texto_ocr(ruta: str) -> list[str]:
-    import cv2
-    import numpy as np
-    import pypdfium2 as pdfium
+    """
+    Extrae texto de PDF escaneado o imagen usando OCR.
+    Intenta Tesseract (liviano), luego PaddleOCR como fallback.
+    """
+    ext = Path(ruta).suffix.lower()
 
-    doc = pdfium.PdfDocument(str(ruta))
-    imagenes = []
-    for page in doc:
-        bitmap = page.render(scale=3.0)
-        arr = np.array(bitmap.to_pil())
-        imagenes.append(cv2.cvtColor(arr, cv2.COLOR_RGB2BGR))
-    doc.close()
-
-    motor = _get_ocr()
-    todas_lineas = []
-
-    for img in imagenes:
-        bloques = []
+    # Convertir a imagenes PIL
+    imagenes_pil = []
+    if ext == ".pdf":
         try:
-            resultado = motor.ocr(img, cls=True)
-            if resultado and resultado[0]:
-                for bloque in resultado[0]:
-                    try:
-                        bbox, (txt, _conf) = bloque
-                        pts = np.array(bbox)
-                        bloques.append({
-                            "txt": txt.strip(),
-                            "x": float(pts[:, 0].mean()),
-                            "y": float(pts[:, 1].mean()),
-                        })
-                    except Exception:
-                        pass
+            from pdf2image import convert_from_path
+            imagenes_pil = convert_from_path(str(ruta), dpi=300)
         except Exception:
-            pass
+            import pypdfium2 as pdfium
+            doc = pdfium.PdfDocument(str(ruta))
+            for page in doc:
+                bitmap = page.render(scale=3.0)
+                imagenes_pil.append(bitmap.to_pil())
+            doc.close()
+    else:
+        from PIL import Image
+        imagenes_pil = [Image.open(str(ruta))]
 
-        bloques.sort(key=lambda b: (round(b["y"] / 15) * 15, b["x"]))
-        fila_actual = [bloques[0]] if bloques else []
-        lineas = []
+    # Intentar Tesseract
+    try:
+        import pytesseract
+        pytesseract.get_tesseract_version()
+        todas_lineas = []
+        config = "--oem 3 --psm 6 -l spa+eng"
+        for img in imagenes_pil:
+            texto = pytesseract.image_to_string(img, config=config)
+            lineas = [l.strip() for l in texto.splitlines() if l.strip()]
+            todas_lineas += lineas
+        return todas_lineas
+    except Exception:
+        pass
 
-        for bloque in bloques[1:]:
-            if abs(bloque["y"] - fila_actual[-1]["y"]) <= 18:
-                fila_actual.append(bloque)
-            else:
+    # Fallback: PaddleOCR
+    try:
+        import cv2
+        import numpy as np
+        from paddleocr import PaddleOCR
+        motor = PaddleOCR(use_angle_cls=True, lang="es", show_log=False)
+        todas_lineas = []
+        for img_pil in imagenes_pil:
+            img = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+            bloques = []
+            try:
+                resultado = motor.ocr(img, cls=True)
+                if resultado and resultado[0]:
+                    for bloque in resultado[0]:
+                        try:
+                            bbox, (txt, _conf) = bloque
+                            pts = np.array(bbox)
+                            bloques.append({"txt": txt.strip(), "x": float(pts[:,0].mean()), "y": float(pts[:,1].mean())})
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            bloques.sort(key=lambda b: (round(b["y"]/15)*15, b["x"]))
+            fila_actual = [bloques[0]] if bloques else []
+            lineas = []
+            for bloque in bloques[1:]:
+                if abs(bloque["y"] - fila_actual[-1]["y"]) <= 18:
+                    fila_actual.append(bloque)
+                else:
+                    fila_actual.sort(key=lambda x: x["x"])
+                    lineas.append("  ".join(b["txt"] for b in fila_actual))
+                    fila_actual = [bloque]
+            if fila_actual:
                 fila_actual.sort(key=lambda x: x["x"])
                 lineas.append("  ".join(b["txt"] for b in fila_actual))
-                fila_actual = [bloque]
+            todas_lineas += lineas
+        return todas_lineas
+    except Exception:
+        pass
 
-        if fila_actual:
-            fila_actual.sort(key=lambda x: x["x"])
-            lineas.append("  ".join(b["txt"] for b in fila_actual))
-
-        todas_lineas += lineas
-
-    return todas_lineas
-
+    raise RuntimeError(
+        "No hay motor OCR disponible. El servidor necesita Tesseract. "
+        "Contacta al administrador del sistema."
+    )
 
 # ── Patrones regex ─────────────────────────────────────────────
 

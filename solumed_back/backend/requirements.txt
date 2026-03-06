@@ -7,25 +7,30 @@ python-multipart==0.0.12
 pydantic-settings==2.6.1
 
 # Auth
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+PyJWT==2.10.0
 bcrypt==4.2.1
 
 # Base de datos
 psycopg2-binary==2.9.10
 
-# HTTP
+# HTTP (para INVIMA API)
 httpx==0.28.1
 
-# PDF
+# PDF generation
 reportlab==4.2.5
 
 # Excel
 openpyxl==3.1.5
 
-# OCR
-Pillow==11.0.0
-pytesseract==0.3.13
-opencv-python-headless==4.10.0.84
+# PDF lectura digital
 pypdfium2==4.30.0
+
+# OCR para PDFs escaneados e imágenes
+pytesseract==0.3.13
+Pillow==11.0.0
 pdf2image==1.17.0
+
+# PaddleOCR opcional — descomenta solo si el servidor tiene +4GB RAM
+# paddlepaddle==2.6.1
+# paddleocr==2.7.3
+# opencv-python-headless==4.9.0.80
