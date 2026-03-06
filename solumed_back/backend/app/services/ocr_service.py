@@ -111,7 +111,7 @@ Reglas estrictas:
     content_blocks.append({"type": "text", "text": prompt})
 
     payload = {
-        "model": "claude-sonnet-4-5-20251001",
+        "model": "claude-haiku-4-5-20251001",
         "max_tokens": 4000,
         "messages": [{
             "role": "user",
@@ -133,7 +133,14 @@ Reglas estrictas:
         },
         timeout=60.0
     )
-    resp.raise_for_status()
+    if resp.status_code != 200:
+        # Mostrar error completo para diagnóstico
+        try:
+            err = resp.json()
+            msg = err.get("error", {}).get("message", resp.text[:300])
+        except Exception:
+            msg = resp.text[:300]
+        raise RuntimeError(f"Claude API {resp.status_code}: {msg}")
     data = resp.json()
     texto = data["content"][0]["text"].strip()
 
@@ -512,7 +519,7 @@ async def procesar_factura(
             "lote":               p.get("lote", ""),
             "vencimiento":        p.get("vencimiento", ""),
             "cantidad":           p.get("cantidad", 1),
-            "num_muestras":       "",
+            "num_muestras":       p.get("cantidad", 1),
             # Datos INVIMA (nombres exactos del schema ProductoRecepcion)
             "registro_sanitario": datos_invima.get("registro_sanitario", p.get("registro_sanitario_factura", "")),
             "estado_invima":      datos_invima.get("estado", ""),
@@ -522,7 +529,7 @@ async def procesar_factura(
             "concentracion":      datos_invima.get("concentracion", ""),
             "expediente":         datos_invima.get("expediente", ""),
             # Evaluacion tecnica
-            "temperatura":        "15-30°C",
+            "temperatura":        "30°C",
             "defectos":           "Ninguno",
             "cumple":             "Acepta",
             "observaciones":      "",
