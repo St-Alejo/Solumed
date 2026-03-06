@@ -115,54 +115,55 @@ Reglas estrictas:
 - NO incluir productos marcados como OBS, obsequio o muestra médica
 - NO incluir líneas de totales, subtotales, impuestos ni notas"""
 
-    # ── Llamada a Gemini Flash (economico, capa gratuita disponible) ──
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    # ── Llamada a Claude Haiku (economico, ~$0.003 por factura) ──
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY no configurada en variables de entorno de Railway")
+        raise RuntimeError("ANTHROPIC_API_KEY no configurada en variables de entorno de Railway")
 
-    # Gemini acepta multiples imagenes en parts
-    parts = []
+    content_blocks = []
     for img_b64 in imagenes_b64:
-        parts.append({
-            "inline_data": {
-                "mime_type": "image/jpeg",
-                "data": img_b64
-            }
+        content_blocks.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}
         })
-    parts.append({"text": prompt})
+    content_blocks.append({"type": "text", "text": prompt})
 
     payload = {
-        "contents": [{"parts": parts}],
-        "generationConfig": {
-            "temperature": 0.1,
-            "maxOutputTokens": 4000,
-        }
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 4000,
+        "messages": [{"role": "user", "content": content_blocks}]
     }
 
-    modelo = "gemini-2.0-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={api_key}"
-
     try:
-        resp = httpx.post(url, json=payload, timeout=120.0)
+        resp = httpx.post(
+            "https://api.anthropic.com/v1/messages",
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            },
+            timeout=120.0
+        )
     except Exception as e:
-        raise RuntimeError(f"Error de conexion a Gemini API: {e}")
+        raise RuntimeError(f"Error de conexion a Claude API: {e}")
 
     if resp.status_code != 200:
         try:
             msg = resp.json().get("error", {}).get("message", resp.text[:400])
         except Exception:
             msg = resp.text[:400]
-        raise RuntimeError(f"Gemini API error {resp.status_code}: {msg}")
+        raise RuntimeError(f"Claude API error {resp.status_code}: {msg}")
 
     data = resp.json()
     try:
-        texto = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except (KeyError, IndexError) as e:
-        raise RuntimeError(f"Respuesta inesperada de Gemini: {data}")
+        texto = data["content"][0]["text"].strip()
+    except (KeyError, IndexError):
+        raise RuntimeError(f"Respuesta inesperada de Claude: {data}")
 
     # Limpiar posibles bloques markdown
-    texto = re.sub(r"^```(?:json)?\s*", "", texto)
-    texto = re.sub(r"\s*```$", "", texto)
+    texto = re.sub(r"```(?:json)?\s*", "", texto)
+    texto = re.sub(r"```", "", texto)
     texto = texto.strip()
 
     productos_raw = json.loads(texto)
@@ -535,7 +536,7 @@ async def procesar_factura(
             "lote":               p.get("lote", ""),
             "vencimiento":        p.get("vencimiento", ""),
             "cantidad":           p.get("cantidad", 1),
-            "num_muestras":       p.get("cantidad", 1),
+            "num_muestras":       "",
             # Datos INVIMA (nombres exactos del schema ProductoRecepcion)
             "registro_sanitario": datos_invima.get("registro_sanitario", p.get("registro_sanitario_factura", "")),
             "estado_invima":      datos_invima.get("estado", ""),
@@ -545,7 +546,7 @@ async def procesar_factura(
             "concentracion":      datos_invima.get("concentracion", ""),
             "expediente":         datos_invima.get("expediente", ""),
             # Evaluacion tecnica
-            "temperatura":        "30°C",
+            "temperatura":        "15-30°C",
             "defectos":           "Ninguno",
             "cumple":             "Acepta",
             "observaciones":      "",
