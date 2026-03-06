@@ -9,6 +9,7 @@ pydantic-settings==2.6.1
 # Auth
 PyJWT==2.10.0
 bcrypt==4.2.1
+python-jose[cryptography]==3.3.0
 
 # Base de datos
 psycopg2-binary==2.9.10
@@ -29,8 +30,3 @@ pypdfium2==4.30.0
 pytesseract==0.3.13
 Pillow==11.0.0
 pdf2image==1.17.0
-
-# PaddleOCR opcional — descomenta solo si el servidor tiene +4GB RAM
-# paddlepaddle==2.6.1
-# paddleocr==2.7.3
-# opencv-python-headless==4.9.0.80
