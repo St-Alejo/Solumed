@@ -58,7 +58,7 @@ COLUMNAS = [
     ("Lote",                 14),
     ("Vencimiento Prod.",    16),
     ("Cantidad",             10),
-    ("N° Muestras",          10),
+    ("N° Muestras",          12),
     ("Temperatura",          12),
     ("Reg. Sanitario",       22),
     ("Estado INVIMA",        16),
