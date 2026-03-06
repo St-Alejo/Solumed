@@ -51,7 +51,7 @@ COLUMNAS = [
     ("Factura",              14),
     ("Proveedor",            22),
     ("Código Producto",      16),
-    ("Nombre Producto",      32),
+    ("Nombre Producto / Presentacion",      32),
     ("Concentración",        14),
     ("Forma Farmacéutica",   20),
     ("Presentación",         32),

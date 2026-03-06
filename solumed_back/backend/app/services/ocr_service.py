@@ -536,7 +536,7 @@ async def procesar_factura(
             "lote":               p.get("lote", ""),
             "vencimiento":        p.get("vencimiento", ""),
             "cantidad":           p.get("cantidad", 1),
-            "num_muestras":       "",
+            "num_muestras":       p.get("cantidad", 1),
             # Datos INVIMA (nombres exactos del schema ProductoRecepcion)
             "registro_sanitario": datos_invima.get("registro_sanitario", p.get("registro_sanitario_factura", "")),
             "estado_invima":      datos_invima.get("estado", ""),
@@ -546,7 +546,7 @@ async def procesar_factura(
             "concentracion":      datos_invima.get("concentracion", ""),
             "expediente":         datos_invima.get("expediente", ""),
             # Evaluacion tecnica
-            "temperatura":        "15-30°C",
+            "temperatura":        "30°C",
             "defectos":           "Ninguno",
             "cumple":             "Acepta",
             "observaciones":      "",
