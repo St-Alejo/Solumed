@@ -46,7 +46,7 @@ def _extraer_texto_pdf_digital(ruta: str) -> list[str]:
 
 # ── Extracción con Claude Vision (escaneados/imágenes) ─────────
 
-def _extraer_productos_con_ia(ruta: str) -> list[dict]:
+def _extraer_productos_con_ia(ruta: str) -> tuple[list[dict], str, str]:
     """
     Envia el archivo a Google Gemini Vision y obtiene productos estructurados.
     Gemini Flash es economico y tiene capa gratuita generosa.
@@ -93,19 +93,23 @@ def _extraer_productos_con_ia(ruta: str) -> list[dict]:
             "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}
         })
 
-    prompt = """Eres un experto en facturas farmacéuticas colombianas. Extrae TODOS los productos de esta factura.
+    prompt = """Eres un experto en facturas farmacéuticas colombianas. Extrae el N° de factura, el nombre del proveedor y TODOS los productos de esta factura.
 
-Responde ÚNICAMENTE con un array JSON válido, sin texto adicional, sin bloques de código markdown:
-[
-  {
-    "codigo": "0014322",
-    "nombre": "TRAMASINDOL TRAMADOL GOTAS",
-    "lote": "A066G26",
-    "vencimiento": "2028-01",
-    "cantidad": 5,
-    "registro_sanitario": "INVIMA 2015M-0016284"
-  }
-]
+Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin bloques de código markdown:
+{
+  "factura_id": "FE-12345",
+  "proveedor": "DISTRIBUIDORA FARMACEUTICA SAS",
+  "productos": [
+    {
+      "codigo": "0014322",
+      "nombre": "TRAMASINDOL TRAMADOL GOTAS",
+      "lote": "A066G26",
+      "vencimiento": "2028-01",
+      "cantidad": 5,
+      "registro_sanitario": "INVIMA 2015M-0016284"
+    }
+  ]
+}
 
 Reglas estrictas:
 - vencimiento siempre en formato YYYY-MM (si viene YYYY-MM-DD, usar solo YYYY-MM)
@@ -166,7 +170,19 @@ Reglas estrictas:
     texto = re.sub(r"```", "", texto)
     texto = texto.strip()
 
-    productos_raw = json.loads(texto)
+    try:
+        data_json = json.loads(texto)
+    except Exception:
+        data_json = {"productos": []}
+    
+    if isinstance(data_json, list):
+        productos_raw = data_json
+        factura_id = ""
+        proveedor = ""
+    else:
+        productos_raw = data_json.get("productos", [])
+        factura_id = str(data_json.get("factura_id", "")).strip()
+        proveedor = str(data_json.get("proveedor", "")).strip()
 
     # Normalizar al formato interno
     productos = []
@@ -190,7 +206,7 @@ Reglas estrictas:
             "registro_sanitario_factura": rs,
         })
 
-    return productos
+    return productos, factura_id, proveedor
 
 
 
@@ -461,7 +477,25 @@ def _detectar_formato(lineas: list[str]) -> str:
     return "GENERICO"
 
 
-def _parsear_lineas(lineas: list[str]) -> list[dict]:
+def _extraer_metadatos_regex(lineas: list[str]) -> tuple[str, str]:
+    import re
+    factura_id = ""
+    proveedor = ""
+    re_factura = re.compile(r'(?:FACTURA|VENTA|REMISION)[^\n]*?(?:N[Oo]\.?|NUMERO|#)\s*([A-Z0-9\-]{3,15})', re.IGNORECASE)
+    re_nit = re.compile(r'NIT\.?\s*\d{8,10}', re.IGNORECASE)
+    re_empresa = re.compile(r'(S\.A\.S\.|SAS|LTDA\.|LTDA|S\.A\.|SA|DISTRIBUIDORA|DROGUERIA|LABORATORIOS?)', re.IGNORECASE)
+    
+    for linea in lineas[:40]:
+        if not factura_id:
+            m = re_factura.search(linea)
+            if m: factura_id = m.group(1).strip()
+        if not proveedor and (re_empresa.search(linea) or re_nit.search(linea)):
+            prov = re.sub(r'NIT.*', '', linea, flags=re.IGNORECASE).strip()
+            if 5 < len(prov) < 60: proveedor = prov
+    
+    return factura_id, proveedor
+
+def _parsear_lineas(lineas: list[str]) -> tuple[list[dict], str, str]:
     formato = _detectar_formato(lineas)
     if formato == "DISTRIMAYOR":
         productos = _parsear_distrimayor(lineas)
@@ -475,7 +509,9 @@ def _parsear_lineas(lineas: list[str]) -> list[dict]:
         alt = _parsear_formato_b(lineas) if formato == "A" else _parsear_formato_a(lineas)
         if len(alt) > len(productos):
             productos = alt
-    return productos
+    
+    f_id, prov = _extraer_metadatos_regex(lineas)
+    return productos, f_id, prov
 
 
 # ── Función principal ──────────────────────────────────────────
@@ -483,7 +519,7 @@ def _parsear_lineas(lineas: list[str]) -> list[dict]:
 async def procesar_factura(
     ruta: str,
     on_progreso: Optional[Callable[[int, str], None]] = None,
-) -> list[dict]:
+) -> dict:
     from app.services.invima_service import buscar_invima
 
     def prog(p: int, msg: str):
@@ -494,17 +530,18 @@ async def procesar_factura(
     ext = Path(ruta).suffix.lower()
     productos_base = []
 
+    f_id, f_prov = "", ""
     if ext == ".pdf" and _pdf_tiene_texto(ruta):
         # PDF digital → parser rápido por regex
         prog(20, "PDF digital — extrayendo texto...")
         lineas = _extraer_texto_pdf_digital(ruta)
         prog(50, f"{len(lineas)} líneas — buscando productos...")
-        productos_base = _parsear_lineas(lineas)
+        productos_base, f_id, f_prov = _parsear_lineas(lineas)
     else:
         # PDF escaneado o imagen → Claude Vision
         prog(15, "Enviando a IA para lectura inteligente...")
         try:
-            productos_base = _extraer_productos_con_ia(ruta)
+            productos_base, f_id, f_prov = _extraer_productos_con_ia(ruta)
             prog(60, f"{len(productos_base)} productos extraídos por IA...")
         except Exception as e:
             raise RuntimeError(f"Error al procesar con IA: {str(e)}")
@@ -550,9 +587,13 @@ async def procesar_factura(
             "defectos":           "Ninguno",
             "cumple":             "Acepta",
             "observaciones":      "",
-            "proveedor":          "",
+            "proveedor":          f_prov,
             "presentacion":       "",
         })
 
     prog(100, f"Listo — {len(productos_finales)} productos procesados")
-    return productos_finales
+    return {
+        "productos": productos_finales,
+        "factura_id": f_id,
+        "proveedor": f_prov
+    }

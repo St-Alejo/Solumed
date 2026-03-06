@@ -97,6 +97,8 @@ export default function RecepcionPage() {
         progreso: 100,
         progrMsg: `${res.total} productos`,
         productos: res.productos || [],
+        facturaId: res.factura_id || item.facturaId,
+        proveedor: res.proveedor || item.proveedor,
       });
       toast("success", `"${item.archivo.name}": ${res.total} productos detectados`);
     } catch (e: any) {

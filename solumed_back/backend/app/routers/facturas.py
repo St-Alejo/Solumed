@@ -56,8 +56,24 @@ async def procesar(
     try:
         contenido = await archivo.read()
         ruta_temp.write_bytes(contenido)
-        productos = await procesar_factura(str(ruta_temp))
-        return {"ok": True, "total": len(productos), "productos": productos}
+        resultado = await procesar_factura(str(ruta_temp))
+        
+        if isinstance(resultado, dict):
+            productos = resultado.get("productos", [])
+            factura_id = resultado.get("factura_id", "")
+            proveedor = resultado.get("proveedor", "")
+        else:
+            productos = resultado
+            factura_id = ""
+            proveedor = ""
+
+        return {
+            "ok": True, 
+            "total": len(productos), 
+            "productos": productos,
+            "factura_id": factura_id,
+            "proveedor": proveedor
+        }
     except Exception as e:
         raise HTTPException(500, f"Error procesando factura: {e}")
     finally:
