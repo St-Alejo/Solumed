@@ -48,32 +48,43 @@ def _extraer_texto_pdf_digital(ruta: str) -> list[str]:
 
 def _extraer_productos_con_claude(ruta: str) -> list[dict]:
     """
-    Envía el archivo a Claude Vision y obtiene productos estructurados.
+    Envia el archivo a Claude Vision y obtiene productos estructurados.
     Funciona con PDFs escaneados, fotos, cualquier imagen de factura.
     """
     import httpx
+    import io
+    from PIL import Image as PILImage
 
     ext = Path(ruta).suffix.lower()
 
-    # Preparar el archivo como base64
-    with open(ruta, "rb") as f:
-        datos_b64 = base64.standard_b64encode(f.read()).decode()
-
+    # Convertir a imagenes JPEG (una por pagina)
+    imagenes_b64 = []
     if ext == ".pdf":
-        media_type = "application/pdf"
-        source_type = "base64"
-        content_block = {
-            "type": "document",
-            "source": {"type": "base64", "media_type": media_type, "data": datos_b64}
-        }
+        try:
+            from pdf2image import convert_from_path
+            paginas = convert_from_path(str(ruta), dpi=200)
+        except Exception:
+            import pypdfium2 as pdfium
+            doc = pdfium.PdfDocument(str(ruta))
+            paginas = [page.render(scale=2.0).to_pil() for page in doc]
+            doc.close()
+        for pag in paginas:
+            buf = io.BytesIO()
+            pag.save(buf, format="JPEG", quality=85)
+            imagenes_b64.append(base64.standard_b64encode(buf.getvalue()).decode())
     else:
-        # Imagen (jpg, png, webp)
-        tipos = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
-        media_type = tipos.get(ext, "image/jpeg")
-        content_block = {
+        img = PILImage.open(str(ruta))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        imagenes_b64.append(base64.standard_b64encode(buf.getvalue()).decode())
+
+    # Construir bloques de contenido (una imagen por pagina)
+    content_blocks = []
+    for img_b64 in imagenes_b64:
+        content_blocks.append({
             "type": "image",
-            "source": {"type": "base64", "media_type": media_type, "data": datos_b64}
-        }
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}
+        })
 
     prompt = """Eres un experto en facturas farmacéuticas colombianas. Extrae TODOS los productos de esta factura.
 
@@ -97,12 +108,14 @@ Reglas estrictas:
 - NO incluir productos marcados como OBS, obsequio o muestra médica
 - NO incluir líneas de totales, subtotales, impuestos ni notas"""
 
+    content_blocks.append({"type": "text", "text": prompt})
+
     payload = {
-        "model": "claude-sonnet-4-20250514",
+        "model": "claude-sonnet-4-5-20251001",
         "max_tokens": 4000,
         "messages": [{
             "role": "user",
-            "content": [content_block, {"type": "text", "text": prompt}]
+            "content": content_blocks
         }]
     }
 
