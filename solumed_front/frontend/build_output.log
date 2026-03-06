@@ -1,0 +1,22 @@
+
+> solumed-frontend@1.0.0 build
+> next build
+
+   ▲ Next.js 15.5.12
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+Failed to compile.
+
+./src/app/(app)/condiciones/page.tsx
+Module not found: Can't resolve 'date-fns'
+
+https://nextjs.org/docs/messages/module-not-found
+
+./src/app/(app)/condiciones/page.tsx
+Module not found: Can't resolve 'date-fns/locale'
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+> Build failed because of webpack errors
