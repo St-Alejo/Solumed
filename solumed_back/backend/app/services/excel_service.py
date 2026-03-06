@@ -140,7 +140,6 @@ def _escribir_fila(ws: Worksheet, row: int, n: int, rec: dict):
         rec.get("nombre_producto", ""),
         rec.get("concentracion", ""),
         rec.get("forma_farmaceutica", ""),
-        rec.get("presentacion", ""),
         rec.get("lote", ""),
         rec.get("vencimiento", ""),
         rec.get("cantidad", ""),
@@ -164,12 +163,12 @@ def _escribir_fila(ws: Worksheet, row: int, n: int, rec: dict):
         cel.alignment = _left() if col_idx > 2 else _center()
         cel.fill = _fill(bg)
 
-        # Colores semánticos en columnas especiales
-        if col_idx == 16:  # Estado INVIMA
+        # Colores semánticos en columnas especiales (Ajustados sin columna Presentación)
+        if col_idx == 15:  # Estado INVIMA
             cel.font = Font(name="Arial", bold=True, color=color_invima, size=9)
-        elif col_idx == 20:  # Defecto
+        elif col_idx == 19:  # Defecto
             cel.font = Font(name="Arial", bold=True, color=color_defecto, size=9)
-        elif col_idx == 21:  # Decisión
+        elif col_idx == 20:  # Decisión
             cel.font = Font(name="Arial", bold=True, color=color_cumple, size=9)
             cel.alignment = _center()
 
@@ -180,21 +179,21 @@ def _escribir_totales(ws: Worksheet, fila_inicio: int, fila_fin: int, fila_total
     """Fila de totales con fórmulas."""
     num_cols = len(COLUMNAS)
     last_col = get_column_letter(num_cols)
-    rango_cumple = f"U{fila_inicio}:U{fila_fin}"
+    rango_cumple = f"T{fila_inicio}:T{fila_fin}"
 
-    ws.merge_cells(f"A{fila_total}:T{fila_total}")
+    ws.merge_cells(f"A{fila_total}:S{fila_total}")
     ws[f"A{fila_total}"].value = "RESUMEN DEL MES"
     ws[f"A{fila_total}"].font = Font(name="Arial", bold=True, color=BLANCO, size=10)
     ws[f"A{fila_total}"].fill = _fill(AZUL_HEADER)
     ws[f"A{fila_total}"].alignment = _center()
     ws[f"A{fila_total}"].border = BORDER
 
-    # Totales en columna U (Decisión)
-    ws[f"U{fila_total}"].value = f'=COUNTIF(U{fila_inicio}:U{fila_fin},"Acepta")&" ✓ / "&COUNTIF(U{fila_inicio}:U{fila_fin},"Rechaza")&" ✗"'
-    ws[f"U{fila_total}"].font = Font(name="Arial", bold=True, color="000000", size=9)
-    ws[f"U{fila_total}"].fill = _fill("E2E8F0")
-    ws[f"U{fila_total}"].alignment = _center()
-    ws[f"U{fila_total}"].border = BORDER
+    # Totales en columna T (Decisión)
+    ws[f"T{fila_total}"].value = f'=COUNTIF(T{fila_inicio}:T{fila_fin},"Acepta")&" ✓ / "&COUNTIF(T{fila_inicio}:T{fila_fin},"Rechaza")&" ✗"'
+    ws[f"T{fila_total}"].font = Font(name="Arial", bold=True, color="000000", size=9)
+    ws[f"T{fila_total}"].fill = _fill("E2E8F0")
+    ws[f"T{fila_total}"].alignment = _center()
+    ws[f"T{fila_total}"].border = BORDER
 
     ws.row_dimensions[fila_total].height = 20
 
