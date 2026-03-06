@@ -498,28 +498,36 @@ async def procesar_factura(
         try:
             rs = p.get("registro_sanitario_factura", "")
             nombre = p.get("nombre_producto", "")
-            datos_invima = await buscar_invima(registro=rs, nombre=nombre)
+            # buscar_invima recibe un solo termino: preferir RS, sino nombre
+            termino_busqueda = rs if rs else nombre
+            resultado = await buscar_invima(termino_busqueda)
+            datos_invima = resultado or {}
         except Exception:
             pass
 
         productos_finales.append({
-            "nombre_producto":            p.get("nombre_producto", ""),
-            "codigo_producto":            p.get("codigo_producto", ""),
-            "lote":                       p.get("lote", ""),
-            "vencimiento":                p.get("vencimiento", ""),
-            "cantidad":                   p.get("cantidad", 1),
-            "registro_sanitario_factura": p.get("registro_sanitario_factura", ""),
-            "registro_sanitario_invima":  datos_invima.get("registro_sanitario", ""),
-            "estado_registro":            datos_invima.get("estado", "DESCONOCIDO"),
-            "titular":                    datos_invima.get("titular", ""),
-            "principio_activo":           datos_invima.get("principio_activo", ""),
-            "forma_farmaceutica":         datos_invima.get("forma_farmaceutica", ""),
-            "expediente":                 datos_invima.get("expediente", ""),
-            "temperatura_min":            15.0,
-            "temperatura_max":            30.0,
-            "defecto_encontrado":         "Ninguno",
-            "decision":                   "Acepta",
-            "observaciones":              "",
+            # Datos de factura
+            "codigo_producto":    p.get("codigo_producto", ""),
+            "nombre_producto":    p.get("nombre_producto", ""),
+            "lote":               p.get("lote", ""),
+            "vencimiento":        p.get("vencimiento", ""),
+            "cantidad":           p.get("cantidad", 1),
+            "num_muestras":       "",
+            # Datos INVIMA (nombres exactos del schema ProductoRecepcion)
+            "registro_sanitario": datos_invima.get("registro_sanitario", p.get("registro_sanitario_factura", "")),
+            "estado_invima":      datos_invima.get("estado", ""),
+            "laboratorio":        datos_invima.get("laboratorio", ""),
+            "principio_activo":   datos_invima.get("principio_activo", ""),
+            "forma_farmaceutica": datos_invima.get("forma_farmaceutica", ""),
+            "concentracion":      datos_invima.get("concentracion", ""),
+            "expediente":         datos_invima.get("expediente", ""),
+            # Evaluacion tecnica
+            "temperatura":        "15-30°C",
+            "defectos":           "Ninguno",
+            "cumple":             "Acepta",
+            "observaciones":      "",
+            "proveedor":          "",
+            "presentacion":       "",
         })
 
     prog(100, f"Listo — {len(productos_finales)} productos procesados")
