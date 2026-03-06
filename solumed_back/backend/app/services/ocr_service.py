@@ -452,6 +452,80 @@ def _parsear_distrimayor(lineas: list[str]) -> list[dict]:
 
     return productos
 
+
+def _parsear_distrimayor_scan(lineas: list[str]) -> list[dict]:
+    """
+    Formato Distrimayor factura IMPRESA/ESCANEADA (formato antiguo).
+    Columnas: Codigo | Descripcion | V: YYYY.MM | Lote | Cantidad | Iva | Total
+    Linea siguiente: CODBARRA R.INVIMA: XXXX CUM: XXXX
+    Diferencia vs electronica: fecha aparece como "V: 2028.01" antes del lote.
+    """
+    RE_DIST_SCAN = re.compile(
+        r'^(\ *\d{4,7})\s+'
+        r'(.+?)\s+'
+        r'V:\s*(\d{4}[.\-]\d{2})\s+'
+        r'(\S+)\s+'
+        r'(\d{1,4})\s+'
+        r'[\d,. ]+$'
+    )
+    RE_RINVIMA = re.compile(
+        r'R\.INVIMA:\s*([A-Z0-9\-]+)\s+CUM:\s*([A-Z0-9\-]+)',
+        re.IGNORECASE
+    )
+    RE_PIE_SCAN = re.compile(
+        r'TOTAL A PAGAR|VALOR EXCLUIDO|SON:|PD/ID|FIRMA Y SELLO',
+        re.IGNORECASE
+    )
+
+    productos = []
+    actual = None
+    en_tabla = False
+
+    for linea in lineas:
+        linea = linea.strip()
+        if not linea:
+            continue
+        if re.search(r'C[o\xf3]digo.+Descripci[o\xf3]n|CODIGO.+DESCRIPCION', linea, re.IGNORECASE):
+            en_tabla = True
+            continue
+        if en_tabla and RE_PIE_SCAN.search(linea):
+            if actual:
+                productos.append(actual)
+                actual = None
+            en_tabla = False
+            continue
+        if not en_tabla:
+            continue
+
+        # Registro sanitario en linea siguiente
+        m_rs = RE_RINVIMA.search(linea)
+        if m_rs and actual:
+            actual['registro_sanitario_factura'] = f"INVIMA {m_rs.group(1)}"
+            continue
+
+        # Linea de producto
+        m = RE_DIST_SCAN.match(linea)
+        if m:
+            if actual:
+                productos.append(actual)
+            if RE_OBSEQUIO.search(m.group(2)):
+                actual = None
+                continue
+            fecha = m.group(3).replace('.', '-')
+            actual = {
+                'codigo_producto':            m.group(1).strip(),
+                'nombre_producto':            m.group(2).strip(),
+                'vencimiento':                fecha,
+                'lote':                       m.group(4).upper(),
+                'cantidad':                   int(m.group(5)),
+                'registro_sanitario_factura': '',
+            }
+
+    if actual:
+        productos.append(actual)
+
+    return productos
+
 def _detectar_formato(lineas: list[str]) -> str:
     """
     Detecta qué formato tiene la factura.
@@ -459,8 +533,12 @@ def _detectar_formato(lineas: list[str]) -> str:
     """
     cabecera = " ".join(lineas[:40]).upper()
 
-    # Distrimayor: NIT 891.200.235 o nombre en cabecera
+    # Distrimayor electronica (PDF digital): tiene "Reg.Sanit." en el texto
+    # Distrimayor escaneada (impresa): tiene "R.INVIMA:" y "V: YYYY.MM"
     if "891.200.235" in cabecera or "DISTRIMAYOR" in cabecera:
+        texto = " ".join(lineas)
+        if "R.INVIMA:" in texto or "R.INVIMA :" in texto:
+            return "DISTRIMAYOR_SCAN"
         return "DISTRIMAYOR"
 
     formato_a = 0
@@ -518,7 +596,9 @@ def _parsear_lineas(lineas: list[str]) -> list[dict]:
     """
     formato = _detectar_formato(lineas)
 
-    if formato == "DISTRIMAYOR":
+    if formato == "DISTRIMAYOR_SCAN":
+        productos = _parsear_distrimayor_scan(lineas)
+    elif formato == "DISTRIMAYOR":
         productos = _parsear_distrimayor(lineas)
     elif formato == "A":
         productos = _parsear_formato_a(lineas)
