@@ -713,7 +713,7 @@ async def procesar_factura(
         p.setdefault("defectos",      "Ninguno")
         p.setdefault("cumple",        "Acepta")
         p.setdefault("observaciones", "")
-        p.setdefault("temperatura",   "15-30°C")
+        p.setdefault("temperatura",   "30°C")
         p.setdefault("num_muestras",  "")
         p.setdefault("concentracion", "")
         p.setdefault("presentacion",  "")
