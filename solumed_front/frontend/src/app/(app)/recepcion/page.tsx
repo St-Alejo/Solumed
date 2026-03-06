@@ -242,7 +242,7 @@ export default function RecepcionPage() {
             {hayPendientes && (
               <button className="btn btn-primary" style={{ width:"100%", justifyContent:"center" }}
                 onClick={procesarTodas}>
-                <Upload size={15}/> Procesar todas con OCR + INVIMA
+                <Upload size={15}/> Procesar todas con IA + INVIMA
               </button>
             )}
           </div>
