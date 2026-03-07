@@ -11,12 +11,13 @@ Endpoints para gestionar:
   - Reportes de gerentes         — solo superadmin
 """
 from fastapi import APIRouter, HTTPException, Depends
+import psycopg2
 from app.core.auth import (
     require_superadmin, require_distributor_o_superior, get_usuario_actual
 )
 from app.core.database import (
     crear_drogeria, listar_drogerias, listar_drogerias_por_gerente,
-    get_drogeria, actualizar_drogeria,
+    get_drogeria, actualizar_drogeria, desactivar_drogeria,
     crear_licencia, get_licencia, listar_licencias_todas,
     crear_usuario, listar_usuarios_drogeria, eliminar_usuario,
     estadisticas_drogeria, dashboard_global, dashboard_gerente,
@@ -27,6 +28,15 @@ from app.models.schemas import (
 )
 
 router = APIRouter()
+
+
+def _pg_error(e: Exception, contexto: str = "registro") -> HTTPException:
+    """Convierte errores de psycopg2 en mensajes claros para el usuario."""
+    if isinstance(e, psycopg2.errors.UniqueViolation):
+        return HTTPException(409, f"Ya existe un {contexto} con ese dato (posible duplicado de NIT, correo u otro campo único)")
+    if isinstance(e, psycopg2.Error):
+        return HTTPException(500, "Error en la base de datos. Por favor intenta nuevamente.")
+    return HTTPException(400, str(e))
 
 
 # ══════════════════════════════════════════════════════════════
@@ -80,8 +90,8 @@ def crear(body: DrogueriaCreate, u=Depends(require_distributor_o_superior)):
             creada_por_rol=u["rol"],
         )
     except Exception as e:
-        raise HTTPException(400, f"Error creando droguería: {e}")
-    return {"ok": True, "drogeria_id": did, "mensaje": f"Droguería '{body.nombre}' creada"}
+        raise _pg_error(e, "droguería")
+    return {"ok": True, "drogeria_id": did, "mensaje": f"Droguería '{body.nombre}' creada correctamente"}
 
 
 @router.get("/drogerias/{did}")
@@ -126,8 +136,8 @@ def desactivar_drogeria(did: int, u=Depends(require_superadmin)):
     Desactiva una droguería (no la borra).
     EXCLUSIVO PARA SUPERADMIN — los gerentes no pueden desactivar droguerías.
     """
-    actualizar_drogeria(did, activa=0)
-    return {"ok": True, "mensaje": "Droguería desactivada"}
+    desactivar_drogeria(did)
+    return {"ok": True, "mensaje": "Droguería desactivada correctamente"}
 
 
 # ══════════════════════════════════════════════════════════════
@@ -216,8 +226,8 @@ def crear_usu(did: int, body: UsuarioCreate, u=Depends(require_distributor_o_sup
     try:
         uid = crear_usuario(did, body.email, body.nombre, body.password, body.rol)
     except Exception as e:
-        raise HTTPException(400, f"Error creando usuario: {e}")
-    return {"ok": True, "usuario_id": uid}
+        raise _pg_error(e, "usuario")
+    return {"ok": True, "usuario_id": uid, "mensaje": f"Usuario '{body.nombre}' creado correctamente"}
 
 
 @router.delete("/usuarios/{uid}")

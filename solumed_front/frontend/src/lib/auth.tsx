@@ -99,16 +99,28 @@ async function apiFetchInternal(
     headers: { ...headers, ...((opts?.headers as Record<string, string>) ?? {}) },
   });
 
+  // Detectar tipo de error según el status
   if (res.status === 401) {
     logout();
-    throw new Error("Sesión expirada. Inicia sesión nuevamente.");
+    // Leer el mensaje del servidor si viene
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail ?? e.message ?? "La sesión ha expirado. Vuelve a iniciar sesión.");
   }
   if (res.status === 402) {
-    throw new Error("Licencia vencida. Contacta a tu proveedor.");
+    throw new Error("Licencia vencida. Contacta a tu proveedor para renovar el servicio.");
+  }
+  if (res.status === 403) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail ?? e.message ?? "No tienes permisos para realizar esta acción.");
+  }
+  if (res.status === 409) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail ?? e.message ?? "Ya existe un registro con ese dato.");
   }
   if (!res.ok) {
     const e = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(e.detail ?? `Error ${res.status}`);
+    // El backend manda `detail` en HTTPException y `message` en el manejador global
+    throw new Error(e.detail ?? e.message ?? `Error ${res.status}: intenta nuevamente`);
   }
   return res.json();
 }
@@ -130,14 +142,14 @@ async function apiFormInternal(
 
   if (res.status === 401) {
     logout();
-    throw new Error("Sesión expirada.");
+    throw new Error("La sesión ha expirado. Vuelve a iniciar sesión.");
   }
   if (res.status === 402) {
-    throw new Error("Licencia vencida.");
+    throw new Error("Licencia vencida. Contacta a tu proveedor para renovar el servicio.");
   }
   if (!res.ok) {
     const e = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(e.detail ?? `Error ${res.status}`);
+    throw new Error(e.detail ?? e.message ?? `Error ${res.status}: intenta nuevamente`);
   }
   return res.json();
 }
