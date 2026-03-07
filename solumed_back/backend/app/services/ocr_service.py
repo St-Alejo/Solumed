@@ -491,11 +491,11 @@ def _extraer_metadatos_regex(lineas: list[str]) -> tuple[str, str]:
         # "No. FACTURA: FVE-000395"
         r'(?:N[Oo]\.?|#)\s*(?:DE\s+)?FACTURA\s*:?\s*([A-Z]{0,4}\d[A-Z0-9\-]{2,19})'
         r'|'
-        # "FVE-000395318" o "FVE 000395318" aparece solo
-        r'\bFVE[-_\s]?(\d{5,15})\b'
+        # "FVE-000395318" o "FVE 000395318" aparece solo → captura prefijo+numero
+        r'\b(FVE[-_\s]?\d{5,15})\b'
         r'|'
-        # "FE-12345" aparece solo  
-        r'\bFE[-_](\d{5,15})\b'
+        # "FE-12345" aparece solo → captura prefijo+numero
+        r'\b(FE[-_]\d{5,15})\b'
         r')',
         re.IGNORECASE
     )
@@ -515,8 +515,8 @@ def _extraer_metadatos_regex(lineas: list[str]) -> tuple[str, str]:
                 val = next((g for g in m.groups() if g), "").strip()
                 # Verificar que tenga al menos un digito (descartar palabras puras como "ELECTRONICA")
                 if val and any(c.isdigit() for c in val):
-                    if val.upper().startswith('FVE'):
-                        val = 'FVE-' + val[3:].lstrip('-_ ')
+                    # Normalizar separador: FVE 395318 / FVE_395318 → FVE-395318
+                    val = re.sub(r'^(FVE|FE)[-_\s]+', lambda m: f"{m.group(1).upper()}-", val, flags=re.IGNORECASE)
                     factura_id = val
         if not proveedor and (re_empresa.search(txt) or re_nit.search(txt)):
             prov = re.sub(r'NIT.*', '', txt, flags=re.IGNORECASE).strip()
