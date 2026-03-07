@@ -481,21 +481,54 @@ def _extraer_metadatos_regex(lineas: list[str]) -> tuple[str, str]:
     import re
     factura_id = ""
     proveedor = ""
-    re_factura = re.compile(r'(?:FACTURA|VENTA|REMISION)[^\n]*?(?:N[Oo]\.?|NUMERO|#)\s*([A-Z0-9\-]{3,15})', re.IGNORECASE)
+    # Patrones amplios para facturas colombianas
+    re_factura = re.compile(
+        r'(?:FACTURA(?:\s+ELECTR[OO]NICA)?(?:\s+DE\s+VENTA)?\s*(?:N[Oo]\.?|NUMERO|#|No)?\s*([A-Z0-9\-]{3,20})'
+        r'|(?:N[Oo]\.?|#)\s*FACTURA\s*:?\s*([A-Z0-9\-]{3,20})'
+        r'|FVE[-_]?(\d{5,15})'
+        r'|FE[-_]?(\d{5,15},?[A-Z0-9]*)'
+        r')',
+        re.IGNORECASE
+    )
     re_nit = re.compile(r'NIT\.?\s*\d{8,10}', re.IGNORECASE)
-    re_empresa = re.compile(r'(S\.A\.S\.|SAS|LTDA\.|LTDA|S\.A\.|SA|DISTRIBUIDORA|DROGUERIA|LABORATORIOS?)', re.IGNORECASE)
-    
-    for linea in lineas[:40]:
+    re_empresa = re.compile(
+        r'\b(S\.A\.S\.|SAS|LTDA\.?|S\.A\.|DISTRIBUIDORA|DROGUERIA|LABORATORIOS?|FARMACEUTICA?|PHARMA)\b',
+        re.IGNORECASE
+    )
+
+    for linea in lineas[:60]:
+        txt = linea.strip()
+        if not txt:
+            continue
         if not factura_id:
-            m = re_factura.search(linea)
-            if m: factura_id = m.group(1).strip()
-        if not proveedor and (re_empresa.search(linea) or re_nit.search(linea)):
-            prov = re.sub(r'NIT.*', '', linea, flags=re.IGNORECASE).strip()
-            if 5 < len(prov) < 60: proveedor = prov
-    
+            m = re_factura.search(txt)
+            if m:
+                factura_id = next((g for g in m.groups() if g), "").strip()
+                if factura_id.lower().startswith('fve'):
+                    factura_id = 'FVE-' + factura_id[3:].lstrip('-_')
+        if not proveedor and (re_empresa.search(txt) or re_nit.search(txt)):
+            prov = re.sub(r'NIT.*', '', txt, flags=re.IGNORECASE).strip()
+            prov = re.sub(r'\b(NIT|TEL|FAX|CALLE|CARRERA).*', '', prov, flags=re.IGNORECASE).strip()
+            if 5 < len(prov) < 80:
+                proveedor = prov
+
     return factura_id, proveedor
 
-def _parsear_lineas(lineas: list[str]) -> tuple[list[dict], str, str]:
+
+def _extraer_id_desde_filename(filename: str) -> str:
+    """Extrae el numero de factura del nombre del archivo."""
+    import re
+    name = Path(filename).stem
+    m = re.search(r'fve[_\-]?(\d{5,15})', name, re.IGNORECASE)
+    if m:
+        return f"FVE-{m.group(1)}"
+    m = re.search(r'\bfe[_\-]([a-z0-9]{4,15})', name, re.IGNORECASE)
+    if m:
+        return m.group(1).upper()
+    nums = re.findall(r'(\d{6,15})', name)
+    return nums[-1] if nums else ""
+
+def _parsear_lineas(lineas: list[str], filename: str = "") -> tuple[list[dict], str, str]:
     formato = _detectar_formato(lineas)
     if formato == "DISTRIMAYOR":
         productos = _parsear_distrimayor(lineas)
@@ -509,8 +542,11 @@ def _parsear_lineas(lineas: list[str]) -> tuple[list[dict], str, str]:
         alt = _parsear_formato_b(lineas) if formato == "A" else _parsear_formato_a(lineas)
         if len(alt) > len(productos):
             productos = alt
-    
+
     f_id, prov = _extraer_metadatos_regex(lineas)
+    # Fallback: si no se extrajo el ID, intentar desde el nombre del archivo
+    if not f_id and filename:
+        f_id = _extraer_id_desde_filename(filename)
     return productos, f_id, prov
 
 
@@ -536,7 +572,7 @@ async def procesar_factura(
         prog(20, "PDF digital — extrayendo texto...")
         lineas = _extraer_texto_pdf_digital(ruta)
         prog(50, f"{len(lineas)} líneas — buscando productos...")
-        productos_base, f_id, f_prov = _parsear_lineas(lineas)
+        productos_base, f_id, f_prov = _parsear_lineas(lineas, ruta)
     else:
         # PDF escaneado o imagen → Claude Vision
         prog(15, "Enviando a IA para lectura inteligente...")
