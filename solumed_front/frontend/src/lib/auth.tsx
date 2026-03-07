@@ -24,7 +24,7 @@ const Ctx = createContext<AuthCtx>({} as AuthCtx);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [token, setToken]     = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -170,18 +170,18 @@ export function useApi() {
     },
 
     admin: {
-      dashboard:        () => apiFetch("/api/admin/dashboard"),
-      drogerias:        () => apiFetch("/api/admin/drogerias"),
-      getDrogeria:      (id: number) => apiFetch(`/api/admin/drogerias/${id}`),
-      crearDrogeria:    (data: any) => apiFetch("/api/admin/drogerias", { method: "POST", body: JSON.stringify(data) }),
-      actualizarDrog:   (id: number, data: any) => apiFetch(`/api/admin/drogerias/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-      desactivarDrog:   (id: number) => apiFetch(`/api/admin/drogerias/${id}`, { method: "DELETE" }),
-      licencias:        () => apiFetch("/api/admin/licencias"),
-      getLicencia:      (did: number) => apiFetch(`/api/admin/licencias/${did}`),
-      crearLicencia:    (data: any) => apiFetch("/api/admin/licencias", { method: "POST", body: JSON.stringify(data) }),
-      usuariosDrog:     (did: number) => apiFetch(`/api/admin/drogerias/${did}/usuarios`),
+      dashboard: () => apiFetch("/api/admin/dashboard"),
+      drogerias: () => apiFetch("/api/admin/drogerias"),
+      getDrogeria: (id: number) => apiFetch(`/api/admin/drogerias/${id}`),
+      crearDrogeria: (data: any) => apiFetch("/api/admin/drogerias", { method: "POST", body: JSON.stringify(data) }),
+      actualizarDrog: (id: number, data: any) => apiFetch(`/api/admin/drogerias/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+      desactivarDrog: (id: number) => apiFetch(`/api/admin/drogerias/${id}`, { method: "DELETE" }),
+      licencias: () => apiFetch("/api/admin/licencias"),
+      getLicencia: (did: number) => apiFetch(`/api/admin/licencias/${did}`),
+      crearLicencia: (data: any) => apiFetch("/api/admin/licencias", { method: "POST", body: JSON.stringify(data) }),
+      usuariosDrog: (did: number) => apiFetch(`/api/admin/drogerias/${did}/usuarios`),
       crearUsuarioDrog: (did: number, data: any) => apiFetch(`/api/admin/drogerias/${did}/usuarios`, { method: "POST", body: JSON.stringify(data) }),
-      eliminarUsuario:  (uid: number) => apiFetch(`/api/admin/usuarios/${uid}`, { method: "DELETE" }),
+      eliminarUsuario: (uid: number) => apiFetch(`/api/admin/usuarios/${uid}`, { method: "DELETE" }),
     },
 
     facturas: {
@@ -223,25 +223,25 @@ export function useApi() {
         por_pagina?: number;
       }) => {
         const qs = new URLSearchParams();
-        if (params?.desde)      qs.set("desde", params.desde);
-        if (params?.hasta)      qs.set("hasta", params.hasta);
+        if (params?.desde) qs.set("desde", params.desde);
+        if (params?.hasta) qs.set("hasta", params.hasta);
         if (params?.factura_id) qs.set("factura_id", params.factura_id);
-        if (params?.pagina)     qs.set("pagina", String(params.pagina));
+        if (params?.pagina) qs.set("pagina", String(params.pagina));
         if (params?.por_pagina) qs.set("por_pagina", String(params.por_pagina));
         const q = qs.toString();
         return apiFetch(`/api/historial${q ? "?" + q : ""}`);
       },
       estadisticas: () => apiFetch("/api/historial/estadisticas"),
-      facturas:     () => apiFetch("/api/historial/facturas"),
-      reportes:     () => apiFetch("/api/historial/reportes"),
+      facturas: () => apiFetch("/api/historial/facturas"),
+      reportes: () => apiFetch("/api/historial/reportes"),
       descargarUrl: (ruta: string) =>
         `${API}/api/historial/descargar?ruta=${encodeURIComponent(ruta)}&token=${token}`,
     },
 
     usuarios: {
-      listar:    () => apiFetch("/api/usuarios"),
-      crear:     (data: any) => apiFetch("/api/usuarios", { method: "POST", body: JSON.stringify(data) }),
-      eliminar:  (uid: number) => apiFetch(`/api/usuarios/${uid}`, { method: "DELETE" }),
+      listar: () => apiFetch("/api/usuarios"),
+      crear: (data: any) => apiFetch("/api/usuarios", { method: "POST", body: JSON.stringify(data) }),
+      eliminar: (uid: number) => apiFetch(`/api/usuarios/${uid}`, { method: "DELETE" }),
       cambiarPassword: (actual: string, nueva: string) =>
         apiFetch("/api/usuarios/cambiar-password", {
           method: "POST",
@@ -249,6 +249,14 @@ export function useApi() {
         }),
       miLicencia: () => apiFetch("/api/usuarios/mi-licencia"),
     },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    condiciones: {
+      cargar: (mes: string) => apiFetch(`/api/condiciones?mes=${mes}`),
+      guardar: (payload: any) => apiFetch("/api/condiciones", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [apiFetch, apiForm, token]); // token solo para descargarUrl que lo usa directamente
 }

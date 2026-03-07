@@ -337,7 +337,7 @@ export default function RecepcionPage() {
                       <div key={idx} style={{ borderTop: "1px solid var(--border)" }}>
                         {/* Cabecera producto */}
                         <div style={{
-                          display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+                          display: "flex", alignItems: "center", gap: 12,
                           padding: "11px 18px", cursor: "pointer",
                           background: idx % 2 === 0 ? "var(--surface)" : "var(--surface2)",
                         }} onClick={() => setProdExpandido(isProdExp ? null : prodKey)}>
@@ -347,7 +347,7 @@ export default function RecepcionPage() {
                           }}>
                             <FlaskConical size={13} color="var(--blue)" />
                           </div>
-                          <div style={{ flex: 1, minWidth: 200 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ fontWeight: 700, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                               {p.nombre_producto || "Producto sin nombre"}
                             </p>
@@ -355,9 +355,9 @@ export default function RecepcionPage() {
                               Lote: {p.lote || "—"} · Vence: {p.vencimiento || "—"} · Cant: {p.cantidad}
                             </p>
                           </div>
-                          <span className={`badge ${colorEstadoInvima(p.estado_invima)} col-hide-mobile`} style={{ flexShrink: 0 }}>{p.estado_invima || "—"}</span>
-                          <span className={`badge ${colorCumple(p.cumple)}`} style={{ flexShrink: 0 }}>{p.cumple}</span>
-                          {isProdExp ? <ChevronUp size={14} color="var(--text4)" style={{ flexShrink: 0 }} /> : <ChevronDown size={14} color="var(--text4)" style={{ flexShrink: 0 }} />}
+                          <span className={`badge ${colorEstadoInvima(p.estado_invima)} col-hide-mobile`}>{p.estado_invima || "—"}</span>
+                          <span className={`badge ${colorCumple(p.cumple)}`}>{p.cumple}</span>
+                          {isProdExp ? <ChevronUp size={14} color="var(--text4)" /> : <ChevronDown size={14} color="var(--text4)" />}
                         </div>
 
                         {/* Detalle expandido */}

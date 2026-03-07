@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { useAuth } from "@/lib/auth";
+import { useAuth, useApi } from "@/lib/auth";
 import { Calendar as CalendarIcon, Download, AlertTriangle, Save, Loader2, ThermometerSun } from "lucide-react";
 import { format, addMonths, subMonths } from "date-fns";
 import { es } from "date-fns/locale";
@@ -21,6 +21,7 @@ type Condicion = {
 
 export default function CondicionesPage() {
     const { usuario } = useAuth();
+    const api = useApi();
     const { toast } = useToast();
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [datos, setDatos] = useState<Condicion[]>([]);
@@ -33,18 +34,14 @@ export default function CondicionesPage() {
         if (!usuario || usuario.rol === "superadmin") return;
         setCargando(true);
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch(`http://localhost:8000/api/condiciones?mes=${anioMes}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const data = await res.json();
+            const data = await api.condiciones.cargar(anioMes);
             if (data.ok) {
                 setDatos(data.datos);
             } else {
                 toast("error", "Error cargando datos");
             }
-        } catch (e) {
-            toast("error", "Error de red al cargar condiciones");
+        } catch (e: any) {
+            toast("error", e.message || "Error de red al cargar condiciones");
         } finally {
             setCargando(false);
         }
@@ -57,7 +54,6 @@ export default function CondicionesPage() {
     const guardarDia = async (cond: Condicion) => {
         setGuardandoFecha(cond.fecha);
         try {
-            const token = localStorage.getItem("token");
             const payload = {
                 fecha: cond.fecha,
                 temperatura_am: cond.temperatura_am === "" ? null : Number(cond.temperatura_am),
@@ -68,15 +64,7 @@ export default function CondicionesPage() {
                 firma_pm: cond.firma_pm,
             };
 
-            const res = await fetch("http://localhost:8000/api/condiciones", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
+            const data = await api.condiciones.guardar(payload);
             if (!data.ok) throw new Error(data.detail || "Error");
             toast("success", "Día guardado correctamente");
             cargarDatos();
@@ -89,8 +77,8 @@ export default function CondicionesPage() {
 
     const exportarExcel = async () => {
         try {
-            const token = localStorage.getItem("token");
-            const res = await fetch(`http://localhost:8000/api/condiciones/exportar?mes=${anioMes}`, {
+            const token = localStorage.getItem("sm_token");
+            const res = await fetch(`${api.BASE}/api/condiciones/exportar?mes=${anioMes}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (!res.ok) throw new Error("Error al exportar");
