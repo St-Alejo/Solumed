@@ -3,14 +3,14 @@
   "/info/page": "app/info/page.js",
   "/login/page": "app/login/page.js",
   "/page": "app/page.js",
-  "/(app)/historial/page": "app/(app)/historial/page.js",
   "/(app)/condiciones/page": "app/(app)/condiciones/page.js",
   "/(app)/perfil/page": "app/(app)/perfil/page.js",
-  "/(app)/invima/page": "app/(app)/invima/page.js",
-  "/(app)/reportes/page": "app/(app)/reportes/page.js",
-  "/admin/drogerias/page": "app/admin/drogerias/page.js",
+  "/(app)/historial/page": "app/(app)/historial/page.js",
   "/admin/licencias/page": "app/admin/licencias/page.js",
+  "/(app)/invima/page": "app/(app)/invima/page.js",
   "/admin/page": "app/admin/page.js",
+  "/admin/drogerias/page": "app/admin/drogerias/page.js",
   "/(app)/recepcion/page": "app/(app)/recepcion/page.js",
+  "/(app)/reportes/page": "app/(app)/reportes/page.js",
   "/(app)/usuarios/page": "app/(app)/usuarios/page.js"
 }
