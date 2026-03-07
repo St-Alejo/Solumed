@@ -11,7 +11,7 @@ Endpoints para gestión de Gerentes Distribuidores.
   GET  /distribuidores/mi-dashboard   → distributor_admin: sus métricas
 """
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 from app.core.auth import require_superadmin, require_distributor_o_superior, get_usuario_actual
 from app.core.database import (
@@ -24,7 +24,7 @@ router = APIRouter()
 
 
 class DistribuidorCreate(BaseModel):
-    email:    EmailStr
+    email:    str
     nombre:   str
     password: str
 
