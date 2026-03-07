@@ -206,7 +206,7 @@ export default function CondicionesPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
                 <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, padding: 20 }}>
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 16 }}>Polígono de Frecuencias - Temperatura (°C)</h3>
-                    <div style={{ height: 250 }}>
+                    <div style={{ width: "100%", height: 250 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -223,7 +223,7 @@ export default function CondicionesPage() {
 
                 <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, padding: 20 }}>
                     <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 16 }}>Polígono de Frecuencias - Humedad (%)</h3>
-                    <div style={{ height: 250 }}>
+                    <div style={{ width: "100%", height: 250 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />

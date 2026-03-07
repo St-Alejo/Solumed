@@ -76,7 +76,7 @@ async def on_startup():
         try:
             _crear_bucket_si_no_existe()
         except Exception as e:
-            print(f"⚠️  Storage: {e}")
+            print(f"[WARN] Storage: {e}")
 
     modo_bd      = "PostgreSQL/Supabase" if settings.usar_postgres else "SQLite local"
     modo_storage = "Supabase Storage" if settings.usar_supabase_storage else "Disco local"

@@ -1,0 +1,64 @@
+INFO:     Started server process [11692]
+INFO:     Waiting for application startup.
+ERROR:    Traceback (most recent call last):
+  File "C:\Users\Steven\AppData\Roaming\Python\Python313\site-packages\starlette\routing.py", line 693, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+               ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python313\Lib\contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Steven\AppData\Roaming\Python\Python313\site-packages\fastapi\routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+               ~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python313\Lib\contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Steven\AppData\Roaming\Python\Python313\site-packages\fastapi\routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+               ~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python313\Lib\contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Steven\AppData\Roaming\Python\Python313\site-packages\fastapi\routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+               ~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python313\Lib\contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Steven\AppData\Roaming\Python\Python313\site-packages\fastapi\routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+               ~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python313\Lib\contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Steven\AppData\Roaming\Python\Python313\site-packages\fastapi\routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+               ~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python313\Lib\contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Steven\AppData\Roaming\Python\Python313\site-packages\fastapi\routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+               ~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Python313\Lib\contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Steven\AppData\Roaming\Python\Python313\site-packages\fastapi\routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+               ~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Users\Steven\AppData\Roaming\Python\Python313\site-packages\starlette\routing.py", line 569, in __aenter__
+    await self._router.startup()
+  File "C:\Users\Steven\AppData\Roaming\Python\Python313\site-packages\starlette\routing.py", line 670, in startup
+    await handler()
+  File "C:\Users\Steven\Documents\back front recepcion\solumed_back\backend\main.py", line 71, in on_startup
+    inicializar()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Steven\Documents\back front recepcion\solumed_back\backend\app\core\database.py", line 263, in inicializar
+    print(f"\u2705 BD lista ({'PostgreSQL/Supabase' if pg else 'SQLite'})")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2705' in position 0: character maps to <undefined>
+
+ERROR:    Application startup failed. Exiting.

@@ -254,13 +254,13 @@ def inicializar():
                 VALUES (?,?,?,'superadmin', NULL)
             """), ("admin@solumed.co", "Administrador SoluMed", pw))
             con.commit()
-            print("✅ Superadmin creado → admin@solumed.co | Admin2026!")
+            print("[OK] Superadmin creado -> admin@solumed.co | Admin2026!")
 
     finally:
         cur.close()
         con.close()
 
-    print(f"✅ BD lista ({'PostgreSQL/Supabase' if pg else 'SQLite'})")
+    print(f"[OK] BD lista ({'PostgreSQL/Supabase' if pg else 'SQLite'})")
 
 
 # ══════════════════════════════════════════════════════════════
