@@ -56,7 +56,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("sm_user", JSON.stringify(data.usuario));
   };
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Invalidar la sesión en el servidor (JTI) antes de limpiar localStorage
+    const t = localStorage.getItem("sm_token");
+    if (t) {
+      try {
+        await fetch(`${API}/api/auth/logout`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${t}` },
+        });
+      } catch { /* ignorar errores de red al salir */ }
+    }
     setToken(null);
     setUsuario(null);
     localStorage.removeItem("sm_token");
@@ -182,6 +192,16 @@ export function useApi() {
       usuariosDrog: (did: number) => apiFetch(`/api/admin/drogerias/${did}/usuarios`),
       crearUsuarioDrog: (did: number, data: any) => apiFetch(`/api/admin/drogerias/${did}/usuarios`, { method: "POST", body: JSON.stringify(data) }),
       eliminarUsuario: (uid: number) => apiFetch(`/api/admin/usuarios/${uid}`, { method: "DELETE" }),
+      reporteGerentes: () => apiFetch("/api/admin/reportes/gerentes"),
+    },
+
+    distribuidores: {
+      listar: () => apiFetch("/api/distribuidores"),
+      crear: (data: any) => apiFetch("/api/distribuidores", { method: "POST", body: JSON.stringify(data) }),
+      desactivar: (uid: number) => apiFetch(`/api/distribuidores/${uid}`, { method: "DELETE" }),
+      drogeriasDe: (uid: number) => apiFetch(`/api/distribuidores/${uid}/drogerias`),
+      misDrogerias: () => apiFetch("/api/distribuidores/mis-drogerias"),
+      miDashboard: () => apiFetch("/api/distribuidores/mi-dashboard"),
     },
 
     facturas: {

@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import inicializar
 
-from app.routers import auth, admin, facturas, invima, historial, usuarios, condiciones
+from app.routers import auth, admin, facturas, invima, historial, usuarios, condiciones, distribuidores
 
 # ── Aplicación FastAPI ────────────────────────────────────────
 app = FastAPI(
@@ -33,9 +33,10 @@ Authorization: Bearer <token>
 ### Roles
 | Rol | Descripción |
 |---|---|
-| `superadmin` | Dueño del negocio SoluMed — acceso total |
-| `admin` | Administrador de una droguería — gestiona usuarios |
-| `regente` | Regente de farmacia — procesa recepciones |
+| `superadmin`        | Dueño del negocio SoluMed — acceso total |
+| `distributor_admin` | Gerente Distribuidor — crea y gestiona sus propias droguerías |
+| `admin`             | Administrador de una droguería — gestiona usuarios |
+| `regente`           | Regente de farmacia — procesa recepciones |
 
 ### Multi-tenant
 Cada droguería tiene su propio espacio de datos completamente aislado.
@@ -56,13 +57,14 @@ app.add_middleware(
 )
 
 # ── Routers ───────────────────────────────────────────────────
-app.include_router(auth.router,      prefix="/api/auth",      tags=["🔐 Autenticación"])
-app.include_router(admin.router,     prefix="/api/admin",     tags=["👑 Admin (superadmin)"])
-app.include_router(facturas.router,  prefix="/api/facturas",  tags=["📄 Facturas / OCR"])
-app.include_router(invima.router,    prefix="/api/invima",    tags=["💊 INVIMA API"])
-app.include_router(historial.router, prefix="/api/historial", tags=["📋 Historial"])
-app.include_router(usuarios.router,  prefix="/api/usuarios",  tags=["👥 Usuarios"])
-app.include_router(condiciones.router, prefix="/api/condiciones", tags=["🌡️ Condiciones"])
+app.include_router(auth.router,          prefix="/api/auth",          tags=["🔐 Autenticación"])
+app.include_router(admin.router,         prefix="/api/admin",         tags=["👑 Admin"])
+app.include_router(distribuidores.router,prefix="/api/distribuidores",tags=["🤝 Distribuidores"])
+app.include_router(facturas.router,      prefix="/api/facturas",      tags=["📄 Facturas / OCR"])
+app.include_router(invima.router,        prefix="/api/invima",        tags=["💊 INVIMA API"])
+app.include_router(historial.router,     prefix="/api/historial",     tags=["📋 Historial"])
+app.include_router(usuarios.router,      prefix="/api/usuarios",      tags=["👥 Usuarios"])
+app.include_router(condiciones.router,   prefix="/api/condiciones",   tags=["🌡️ Condiciones"])
 
 
 # ── Eventos ───────────────────────────────────────────────────

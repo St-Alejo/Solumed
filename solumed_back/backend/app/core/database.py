@@ -5,10 +5,12 @@ Base de datos multi-driver: SQLite (desarrollo) o PostgreSQL/Supabase (producci�
 La misma interfaz pública funciona con ambos — sin cambios en los routers.
 
 TABLAS:
-  drogerias  → tenants (clientes)
-  licencias  → planes de pago por droguería
-  usuarios   → cuentas con roles: superadmin | admin | regente
-  historial  → recepciones técnicas, aisladas por drogeria_id
+  drogerias             → tenants (clientes)
+  licencias             → planes de pago por droguería
+  usuarios              → cuentas con roles: superadmin | distributor_admin | admin | regente
+  historial             → recepciones técnicas, aisladas por drogeria_id
+  condiciones_ambient.  → temperatura/humedad diaria
+  sesiones              → control de sesiones activas por dispositivo
 """
 
 import contextlib
@@ -125,33 +127,54 @@ def inicializar():
         # ── drogerias ─────────────────────────────────────────
         cur.execute(f"""
             CREATE TABLE IF NOT EXISTS drogerias (
-                id        {text_pk},
-                nombre    TEXT NOT NULL,
-                nit       TEXT UNIQUE,
-                ciudad    TEXT DEFAULT '',
-                direccion TEXT DEFAULT '',
-                telefono  TEXT DEFAULT '',
-                email     TEXT DEFAULT '',
-                logo_url  TEXT DEFAULT '',
-                activa    {bool_type},
-                creada_en {date_now}
+                id              {text_pk},
+                nombre          TEXT NOT NULL,
+                nit             TEXT UNIQUE,
+                ciudad          TEXT DEFAULT '',
+                direccion       TEXT DEFAULT '',
+                telefono        TEXT DEFAULT '',
+                email           TEXT DEFAULT '',
+                logo_url        TEXT DEFAULT '',
+                activa          {bool_type},
+                creada_en       {date_now},
+                creada_por_id   INTEGER REFERENCES usuarios(id),
+                creada_por_rol  TEXT DEFAULT ''
             )
         """)
+
+        # Migración: añadir columnas si no existen (base de datos existente)
+        for col_sql in [
+            "ALTER TABLE drogerias ADD COLUMN creada_por_id   INTEGER REFERENCES usuarios(id)",
+            "ALTER TABLE drogerias ADD COLUMN creada_por_rol  TEXT DEFAULT ''",
+        ]:
+            try:
+                cur.execute(col_sql)
+            except Exception:
+                pass  # La columna ya existe
 
         # ── licencias ─────────────────────────────────────────
         cur.execute(f"""
             CREATE TABLE IF NOT EXISTS licencias (
-                id           {text_pk},
-                drogeria_id  INTEGER NOT NULL REFERENCES drogerias(id),
-                plan         TEXT DEFAULT 'mensual',
-                estado       TEXT DEFAULT 'activa',
-                inicio       TEXT NOT NULL,
-                vencimiento  TEXT NOT NULL,
-                max_usuarios INTEGER DEFAULT 5,
-                precio_cop   {int_def},
-                notas        TEXT DEFAULT ''
+                id              {text_pk},
+                drogeria_id     INTEGER NOT NULL REFERENCES drogerias(id),
+                plan            TEXT DEFAULT 'mensual',
+                estado          TEXT DEFAULT 'activa',
+                inicio          TEXT NOT NULL,
+                vencimiento     TEXT NOT NULL,
+                max_usuarios    INTEGER DEFAULT 5,
+                precio_cop      {int_def},
+                notas           TEXT DEFAULT '',
+                creada_por_id   INTEGER REFERENCES usuarios(id)
             )
         """)
+
+        for col_sql in [
+            "ALTER TABLE licencias ADD COLUMN creada_por_id INTEGER REFERENCES usuarios(id)",
+        ]:
+            try:
+                cur.execute(col_sql)
+            except Exception:
+                pass  # La columna ya existe
 
         # ── usuarios ──────────────────────────────────────────
         cur.execute(f"""
@@ -241,6 +264,27 @@ def inicializar():
             cur.execute("CREATE INDEX IF NOT EXISTS idx_conda_drog ON condiciones_ambientales(drogeria_id)")
         except Exception:
             pass
+
+        # ── sesiones ──────────────────────────────────────────
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS sesiones (
+                id          {text_pk},
+                usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                token_jti   TEXT NOT NULL UNIQUE,
+                device_info TEXT DEFAULT '',
+                creada_en   {ts_now},
+                expira_en   TEXT NOT NULL,
+                activa      {bool_type}
+            )
+        """)
+        for sql in [
+            "CREATE INDEX IF NOT EXISTS idx_ses_usuario ON sesiones(usuario_id)",
+            "CREATE INDEX IF NOT EXISTS idx_ses_jti     ON sesiones(token_jti)",
+        ]:
+            try:
+                cur.execute(sql)
+            except Exception:
+                pass
 
         con.commit()
 
@@ -410,11 +454,13 @@ def cambiar_password(uid: int, nueva: str):
 # ══════════════════════════════════════════════════════════════
 
 def crear_drogeria(nombre: str, nit: str = "", ciudad: str = "",
-                   direccion: str = "", telefono: str = "", email: str = "") -> int:
+                   direccion: str = "", telefono: str = "", email: str = "",
+                   creada_por_id: Optional[int] = None,
+                   creada_por_rol: str = "") -> int:
     return _execute("""
-        INSERT INTO drogerias (nombre, nit, ciudad, direccion, telefono, email)
-        VALUES (?,?,?,?,?,?)
-    """, (nombre, nit, ciudad, direccion, telefono, email))
+        INSERT INTO drogerias (nombre, nit, ciudad, direccion, telefono, email, creada_por_id, creada_por_rol)
+        VALUES (?,?,?,?,?,?,?,?)
+    """, (nombre, nit, ciudad, direccion, telefono, email, creada_por_id, creada_por_rol))
 
 
 def get_drogeria(did: int) -> Optional[dict]:
@@ -424,10 +470,43 @@ def get_drogeria(did: int) -> Optional[dict]:
 def listar_drogerias() -> list[dict]:
     return _fetch_all("""
         SELECT d.*,
-               l.plan        AS lic_plan,
-               l.estado      AS lic_estado,
-               l.vencimiento AS lic_vencimiento,
-               l.max_usuarios AS lic_max_usuarios,
+               l.plan          AS lic_plan,
+               l.estado        AS lic_estado,
+               l.vencimiento   AS lic_vencimiento,
+               l.max_usuarios  AS lic_max_usuarios,
+               creador.nombre  AS creada_por_nombre,
+               creador.email   AS creada_por_email,
+               COUNT(DISTINCT u.id) AS total_usuarios,
+               COUNT(DISTINCT h.id) AS total_recepciones
+        FROM drogerias d
+        LEFT JOIN licencias l
+            ON l.drogeria_id = d.id
+            AND l.estado = 'activa'
+            AND l.id = (
+                SELECT id FROM licencias
+                WHERE drogeria_id = d.id AND estado = 'activa'
+                ORDER BY id DESC LIMIT 1
+            )
+        LEFT JOIN usuarios creador ON creador.id = d.creada_por_id
+        LEFT JOIN usuarios u ON u.drogeria_id = d.id AND u.activo=TRUE
+        LEFT JOIN historial h ON h.drogeria_id = d.id
+        GROUP BY d.id, d.nombre, d.nit, d.ciudad, d.direccion, d.telefono,
+                 d.email, d.logo_url, d.activa, d.creada_en,
+                 d.creada_por_id, d.creada_por_rol,
+                 l.plan, l.estado, l.vencimiento, l.max_usuarios,
+                 creador.nombre, creador.email
+        ORDER BY d.nombre
+    """)
+
+
+def listar_drogerias_por_gerente(distributor_id: int) -> list[dict]:
+    """Droguerías creadas por un gerente distribuidor específico."""
+    return _fetch_all("""
+        SELECT d.*,
+               l.plan          AS lic_plan,
+               l.estado        AS lic_estado,
+               l.vencimiento   AS lic_vencimiento,
+               l.max_usuarios  AS lic_max_usuarios,
                COUNT(DISTINCT u.id) AS total_usuarios,
                COUNT(DISTINCT h.id) AS total_recepciones
         FROM drogerias d
@@ -441,11 +520,13 @@ def listar_drogerias() -> list[dict]:
             )
         LEFT JOIN usuarios u ON u.drogeria_id = d.id AND u.activo=TRUE
         LEFT JOIN historial h ON h.drogeria_id = d.id
+        WHERE d.creada_por_id = ?
         GROUP BY d.id, d.nombre, d.nit, d.ciudad, d.direccion, d.telefono,
                  d.email, d.logo_url, d.activa, d.creada_en,
+                 d.creada_por_id, d.creada_por_rol,
                  l.plan, l.estado, l.vencimiento, l.max_usuarios
         ORDER BY d.nombre
-    """)
+    """, (distributor_id,))
 
 
 def actualizar_drogeria(did: int, **campos):
@@ -464,11 +545,12 @@ def desactivar_drogeria(did: int):
 
 def crear_licencia(drogeria_id: int, plan: str, inicio: str,
                    vencimiento: str, max_usuarios: int = 5,
-                   precio_cop: int = 0, notas: str = "") -> int:
+                   precio_cop: int = 0, notas: str = "",
+                   creada_por_id: Optional[int] = None) -> int:
     return _execute("""
-        INSERT INTO licencias (drogeria_id,plan,estado,inicio,vencimiento,max_usuarios,precio_cop,notas)
-        VALUES (?,?,?,?,?,?,?,?)
-    """, (drogeria_id, plan, "activa", inicio, vencimiento, max_usuarios, precio_cop, notas))
+        INSERT INTO licencias (drogeria_id,plan,estado,inicio,vencimiento,max_usuarios,precio_cop,notas,creada_por_id)
+        VALUES (?,?,?,?,?,?,?,?,?)
+    """, (drogeria_id, plan, "activa", inicio, vencimiento, max_usuarios, precio_cop, notas, creada_por_id))
 
 
 def get_licencia(drogeria_id: int) -> Optional[dict]:
@@ -638,6 +720,132 @@ def verificar_alerta_condiciones(drogeria_id: int) -> bool:
     hoy = date.today().isoformat()
     registro = _fetch_one("SELECT * FROM condiciones_ambientales WHERE drogeria_id=? AND fecha=?", (drogeria_id, hoy))
     return registro is None
+
+# ══════════════════════════════════════════════════════════════
+#  SESIONES (control de dispositivos)
+# ══════════════════════════════════════════════════════════════
+
+LIMITE_SESIONES = {
+    "superadmin":        0,   # ilimitado
+    "distributor_admin": 1,
+    "admin":             3,
+    "regente":           3,
+}
+
+
+def crear_sesion(usuario_id: int, token_jti: str, expira_en: str,
+                 device_info: str = "") -> int:
+    """Registra una nueva sesión activa."""
+    return _execute("""
+        INSERT INTO sesiones (usuario_id, token_jti, expira_en, device_info)
+        VALUES (?,?,?,?)
+    """, (usuario_id, token_jti, expira_en, device_info))
+
+
+def invalidar_sesion(token_jti: str):
+    """Marca una sesión como inactiva (logout o desplazamiento)."""
+    _execute("UPDATE sesiones SET activa=0 WHERE token_jti=?", (token_jti,))
+
+
+def sesion_valida(token_jti: str) -> bool:
+    """Verifica que el jti esté en sesiones activas y no haya vencido."""
+    row = _fetch_one(
+        "SELECT id FROM sesiones WHERE token_jti=? AND activa=1",
+        (token_jti,)
+    )
+    return row is not None
+
+
+def limpiar_sesiones_exceso(usuario_id: int, rol: str) -> int:
+    """
+    Elimina sesiones activas sobrantes según el límite del rol.
+    Retorna el número de sesiones invalidadas.
+    """
+    limite = LIMITE_SESIONES.get(rol, 3)
+    if limite == 0:  # superadmin — sin límite
+        return 0
+
+    activas = _fetch_all(
+        "SELECT id, token_jti FROM sesiones WHERE usuario_id=? AND activa=1 ORDER BY id ASC",
+        (usuario_id,)
+    )
+    # El nuevo login va a añadir 1 más → tenemos que liberar espacio para él
+    exceso = len(activas) - (limite - 1)
+    if exceso <= 0:
+        return 0
+
+    a_borrar = activas[:exceso]  # las más antiguas primero
+    for s in a_borrar:
+        invalidar_sesion(s["token_jti"])
+    return len(a_borrar)
+
+
+# ══════════════════════════════════════════════════════════════
+#  DISTRIBUIDORES
+# ══════════════════════════════════════════════════════════════
+
+def listar_distribuidores() -> list[dict]:
+    """Lista todos los gerentes distribuidores con sus estadísticas."""
+    return _fetch_all("""
+        SELECT u.id, u.email, u.nombre, u.activo, u.creado_en, u.ultimo_login,
+               COUNT(DISTINCT d.id) AS total_drogerias,
+               SUM(CASE WHEN d.activa=1 THEN 1 ELSE 0 END) AS drogerias_activas
+        FROM usuarios u
+        LEFT JOIN drogerias d ON d.creada_por_id = u.id
+        WHERE u.rol = 'distributor_admin'
+        GROUP BY u.id, u.email, u.nombre, u.activo, u.creado_en, u.ultimo_login
+        ORDER BY u.nombre
+    """)
+
+
+def dashboard_gerente(distributor_id: int) -> dict:
+    """Métricas personales para el gerente distribuidor."""
+    total = (_fetch_one(
+        "SELECT COUNT(*) AS n FROM drogerias WHERE creada_por_id=?",
+        (distributor_id,)
+    ) or {}).get("n", 0)
+
+    activas = (_fetch_one(
+        "SELECT COUNT(*) AS n FROM drogerias WHERE creada_por_id=? AND activa=1",
+        (distributor_id,)
+    ) or {}).get("n", 0)
+
+    inactivas = total - activas
+
+    return {
+        "total_drogerias":    total,
+        "drogerias_activas":  activas,
+        "drogerias_inactivas": inactivas,
+    }
+
+
+def reporte_gerentes() -> list[dict]:
+    """Reporte para superadmin: droguerías agrupadas por gerente."""
+    return _fetch_all("""
+        SELECT
+            u.id           AS gerente_id,
+            u.nombre       AS gerente_nombre,
+            u.email        AS gerente_email,
+            u.activo       AS gerente_activo,
+            COUNT(DISTINCT d.id)                              AS total_drogerias,
+            SUM(CASE WHEN d.activa=1 THEN 1 ELSE 0 END)      AS drogerias_activas,
+            SUM(CASE WHEN d.activa=0 THEN 1 ELSE 0 END)      AS drogerias_inactivas,
+            SUM(CASE WHEN l.estado='activa' THEN 1 ELSE 0 END) AS licencias_activas,
+            SUM(CASE WHEN l.estado='vencida' THEN 1 ELSE 0 END) AS licencias_vencidas
+        FROM usuarios u
+        LEFT JOIN drogerias d ON d.creada_por_id = u.id
+        LEFT JOIN licencias l
+            ON l.drogeria_id = d.id
+            AND l.id = (
+                SELECT id FROM licencias
+                WHERE drogeria_id = d.id
+                ORDER BY id DESC LIMIT 1
+            )
+        WHERE u.rol = 'distributor_admin'
+        GROUP BY u.id, u.nombre, u.email, u.activo
+        ORDER BY total_drogerias DESC
+    """)
+
 
 # ══════════════════════════════════════════════════════════════
 #  DASHBOARD GLOBAL (superadmin)
