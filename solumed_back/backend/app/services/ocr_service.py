@@ -481,12 +481,21 @@ def _extraer_metadatos_regex(lineas: list[str]) -> tuple[str, str]:
     import re
     factura_id = ""
     proveedor = ""
-    # Patrones amplios para facturas colombianas
+    # El numero de factura SIEMPRE debe contener al menos un digito
+    # Patrones de mayor a menor especificidad para facturas colombianas
     re_factura = re.compile(
-        r'(?:FACTURA(?:\s+ELECTR[OO]NICA)?(?:\s+DE\s+VENTA)?\s*(?:N[Oo]\.?|NUMERO|#|No)?\s*([A-Z0-9\-]{3,20})'
-        r'|(?:N[Oo]\.?|#)\s*FACTURA\s*:?\s*([A-Z0-9\-]{3,20})'
-        r'|FVE[-_]?(\d{5,15})'
-        r'|FE[-_]?(\d{5,15},?[A-Z0-9]*)'
+        r'(?:'
+        # "FACTURA ... No. FE-12345" o "FACTURA ... # 000395"
+        r'(?:FACTURA(?:\s+ELECTR[OO]NICA)?(?:\s+DE\s+VENTA)?)\s*(?:N[Oo]\.?|NUMERO|#|No\.?)\s*:?\s*([A-Z]{0,4}\d[A-Z0-9\-]{2,19})'
+        r'|'
+        # "No. FACTURA: FVE-000395"
+        r'(?:N[Oo]\.?|#)\s*(?:DE\s+)?FACTURA\s*:?\s*([A-Z]{0,4}\d[A-Z0-9\-]{2,19})'
+        r'|'
+        # "FVE-000395318" o "FVE 000395318" aparece solo
+        r'\bFVE[-_\s]?(\d{5,15})\b'
+        r'|'
+        # "FE-12345" aparece solo  
+        r'\bFE[-_](\d{5,15})\b'
         r')',
         re.IGNORECASE
     )
@@ -503,9 +512,12 @@ def _extraer_metadatos_regex(lineas: list[str]) -> tuple[str, str]:
         if not factura_id:
             m = re_factura.search(txt)
             if m:
-                factura_id = next((g for g in m.groups() if g), "").strip()
-                if factura_id.lower().startswith('fve'):
-                    factura_id = 'FVE-' + factura_id[3:].lstrip('-_')
+                val = next((g for g in m.groups() if g), "").strip()
+                # Verificar que tenga al menos un digito (descartar palabras puras como "ELECTRONICA")
+                if val and any(c.isdigit() for c in val):
+                    if val.upper().startswith('FVE'):
+                        val = 'FVE-' + val[3:].lstrip('-_ ')
+                    factura_id = val
         if not proveedor and (re_empresa.search(txt) or re_nit.search(txt)):
             prov = re.sub(r'NIT.*', '', txt, flags=re.IGNORECASE).strip()
             prov = re.sub(r'\b(NIT|TEL|FAX|CALLE|CARRERA).*', '', prov, flags=re.IGNORECASE).strip()
