@@ -42,7 +42,7 @@
       "static/chunks/255-091853b4155593e2.js",
       "static/chunks/main-app-10e509db3e58e9a4.js",
       "static/chunks/260-70fcdbff29207566.js",
-      "static/chunks/app/(app)/layout-3028de586a001240.js"
+      "static/chunks/app/(app)/layout-1e0c8580ec7fe0a3.js"
     ],
     "/(app)/condiciones/page": [
       "static/chunks/webpack-6dca42208e982ef0.js",
@@ -52,6 +52,13 @@
       "static/chunks/326-a66c2e62b9ffe3d8.js",
       "static/chunks/app/(app)/condiciones/page-f437b299b7de810e.js"
     ],
+    "/(app)/historial/page": [
+      "static/chunks/webpack-6dca42208e982ef0.js",
+      "static/chunks/4bd1b696-409494caf8c83275.js",
+      "static/chunks/255-091853b4155593e2.js",
+      "static/chunks/main-app-10e509db3e58e9a4.js",
+      "static/chunks/app/(app)/historial/page-753e42d61dd2ba9a.js"
+    ],
     "/(app)/invima/page": [
       "static/chunks/webpack-6dca42208e982ef0.js",
       "static/chunks/4bd1b696-409494caf8c83275.js",
@@ -59,13 +66,6 @@
       "static/chunks/main-app-10e509db3e58e9a4.js",
       "static/chunks/573-e62abdc00bd51aa2.js",
       "static/chunks/app/(app)/invima/page-5e3f1aca42f055c5.js"
-    ],
-    "/(app)/historial/page": [
-      "static/chunks/webpack-6dca42208e982ef0.js",
-      "static/chunks/4bd1b696-409494caf8c83275.js",
-      "static/chunks/255-091853b4155593e2.js",
-      "static/chunks/main-app-10e509db3e58e9a4.js",
-      "static/chunks/app/(app)/historial/page-753e42d61dd2ba9a.js"
     ],
     "/(app)/perfil/page": [
       "static/chunks/webpack-6dca42208e982ef0.js",

@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth";
+import { useAuth, useApi } from "@/lib/auth";
 import {
   FlaskConical, ClipboardCheck, History, Search,
   FileText, Users, LogOut, ChevronRight, X, Menu,
@@ -24,6 +24,7 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const { usuario, logout } = useAuth();
+  const api = useApi();
   const { theme, toggle } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
@@ -35,11 +36,7 @@ export default function Sidebar() {
     if (!usuario || usuario.rol === "superadmin") return;
     const revisar = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch("http://localhost:8000/api/condiciones/alertas", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const data = await res.json();
+        const data = await api.apiFetch("/api/condiciones/alertas");
         if (data.ok) setFaltaRegistro(data.alerta);
       } catch (e) { }
     };
