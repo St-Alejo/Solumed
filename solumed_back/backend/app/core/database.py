@@ -744,13 +744,15 @@ def crear_sesion(usuario_id: int, token_jti: str, expira_en: str,
 
 def invalidar_sesion(token_jti: str):
     """Marca una sesión como inactiva (logout o desplazamiento)."""
-    _execute("UPDATE sesiones SET activa=0 WHERE token_jti=?", (token_jti,))
+    falso = "FALSE" if settings.usar_postgres else "0"
+    _execute(f"UPDATE sesiones SET activa={falso} WHERE token_jti=?", (token_jti,))
 
 
 def sesion_valida(token_jti: str) -> bool:
     """Verifica que el jti esté en sesiones activas y no haya vencido."""
+    verdad = "TRUE" if settings.usar_postgres else "1"
     row = _fetch_one(
-        "SELECT id FROM sesiones WHERE token_jti=? AND activa=1",
+        f"SELECT id FROM sesiones WHERE token_jti=? AND activa={verdad}",
         (token_jti,)
     )
     return row is not None
@@ -765,8 +767,9 @@ def limpiar_sesiones_exceso(usuario_id: int, rol: str) -> int:
     if limite == 0:  # superadmin — sin límite
         return 0
 
+    verdad = "TRUE" if settings.usar_postgres else "1"
     activas = _fetch_all(
-        "SELECT id, token_jti FROM sesiones WHERE usuario_id=? AND activa=1 ORDER BY id ASC",
+        f"SELECT id, token_jti FROM sesiones WHERE usuario_id=? AND activa={verdad} ORDER BY id ASC",
         (usuario_id,)
     )
     # El nuevo login va a añadir 1 más → tenemos que liberar espacio para él
@@ -786,10 +789,12 @@ def limpiar_sesiones_exceso(usuario_id: int, rol: str) -> int:
 
 def listar_distribuidores() -> list[dict]:
     """Lista todos los gerentes distribuidores con sus estadísticas."""
-    return _fetch_all("""
+    # CASE WHEN con booleanos compatible entre SQLite y PostgreSQL
+    activa_true = "TRUE" if settings.usar_postgres else "1"
+    return _fetch_all(f"""
         SELECT u.id, u.email, u.nombre, u.activo, u.creado_en, u.ultimo_login,
                COUNT(DISTINCT d.id) AS total_drogerias,
-               SUM(CASE WHEN d.activa=1 THEN 1 ELSE 0 END) AS drogerias_activas
+               SUM(CASE WHEN d.activa={activa_true} THEN 1 ELSE 0 END) AS drogerias_activas
         FROM usuarios u
         LEFT JOIN drogerias d ON d.creada_por_id = u.id
         WHERE u.rol = 'distributor_admin'
@@ -805,8 +810,9 @@ def dashboard_gerente(distributor_id: int) -> dict:
         (distributor_id,)
     ) or {}).get("n", 0)
 
+    verdad = "TRUE" if settings.usar_postgres else "1"
     activas = (_fetch_one(
-        "SELECT COUNT(*) AS n FROM drogerias WHERE creada_por_id=? AND activa=1",
+        f"SELECT COUNT(*) AS n FROM drogerias WHERE creada_por_id=? AND activa={verdad}",
         (distributor_id,)
     ) or {}).get("n", 0)
 
@@ -821,16 +827,18 @@ def dashboard_gerente(distributor_id: int) -> dict:
 
 def reporte_gerentes() -> list[dict]:
     """Reporte para superadmin: droguerías agrupadas por gerente."""
-    return _fetch_all("""
+    verdad = "TRUE" if settings.usar_postgres else "1"
+    falso  = "NOT TRUE" if settings.usar_postgres else "0"
+    return _fetch_all(f"""
         SELECT
             u.id           AS gerente_id,
             u.nombre       AS gerente_nombre,
             u.email        AS gerente_email,
             u.activo       AS gerente_activo,
-            COUNT(DISTINCT d.id)                              AS total_drogerias,
-            SUM(CASE WHEN d.activa=1 THEN 1 ELSE 0 END)      AS drogerias_activas,
-            SUM(CASE WHEN d.activa=0 THEN 1 ELSE 0 END)      AS drogerias_inactivas,
-            SUM(CASE WHEN l.estado='activa' THEN 1 ELSE 0 END) AS licencias_activas,
+            COUNT(DISTINCT d.id)                                AS total_drogerias,
+            SUM(CASE WHEN d.activa={verdad} THEN 1 ELSE 0 END) AS drogerias_activas,
+            SUM(CASE WHEN d.activa={falso}  THEN 1 ELSE 0 END) AS drogerias_inactivas,
+            SUM(CASE WHEN l.estado='activa'  THEN 1 ELSE 0 END) AS licencias_activas,
             SUM(CASE WHEN l.estado='vencida' THEN 1 ELSE 0 END) AS licencias_vencidas
         FROM usuarios u
         LEFT JOIN drogerias d ON d.creada_por_id = u.id
