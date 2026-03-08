@@ -52,7 +52,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div style={{ width: 30, height: 30, borderRadius: 8, background: "linear-gradient(135deg,#7c3aed,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <FlaskConical size={14} color="#fff" />
             </div>
-            <span style={{ color: "#f1f5f9", fontWeight: 800, fontSize: 14 }}>SoluMed Admin</span>
+            <span style={{ color: "#f1f5f9", fontWeight: 800, fontSize: 14 }}>NexoFarma Admin</span>
           </div>
           {/* Salir siempre visible en móvil */}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -88,7 +88,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <FlaskConical size={16} color="#fff" />
               </div>
               <div>
-                <p style={{ color: "#f1f5f9", fontSize: 13, fontWeight: 800 }}>SoluMed Admin</p>
+                <p style={{ color: "#f1f5f9", fontSize: 13, fontWeight: 800 }}>NexoFarma Admin</p>
                 <p style={{ color: "#475569", fontSize: 10 }}>Panel superadmin</p>
               </div>
             </div>

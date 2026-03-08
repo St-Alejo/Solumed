@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-const WHATSAPP = "https://wa.me/573187993643?text=Hola%2C%20quiero%20m%C3%A1s%20informaci%C3%B3n%20sobre%20SoluMed%20para%20mi%20drogue%C3%ADa";
+const WHATSAPP = "https://wa.me/573187993643?text=Hola%2C%20quiero%20m%C3%A1s%20informaci%C3%B3n%20sobre%20NexoFarma%20para%20mi%20drogue%C3%ADa";
 
 const PLANES = [
   {
@@ -497,7 +497,7 @@ export default function InfoPage() {
                 con el INVIMA.
               </h1>
               <p className="hero-sub">
-                SoluMed automatiza la recepción técnica de medicamentos: extrae los productos de tu factura, los valida contra el catálogo oficial del INVIMA y genera el acta lista para firmar — todo en minutos.
+                NexoFarma automatiza la recepción técnica de medicamentos: extrae los productos de tu factura, los valida contra el catálogo oficial del INVIMA y genera el acta lista para firmar — todo en minutos.
               </p>
               <div className="hero-btns">
                 <button className="btn-hero-primary" onClick={() => document.getElementById('planes')?.scrollIntoView({behavior:'smooth'})}>
@@ -628,7 +628,7 @@ export default function InfoPage() {
                         boxShadow: `0 4px 16px ${plan.color}40`
                       }}
                       onClick={() => window.open(
-                        `${WHATSAPP}&text=Hola%2C%20quiero%20contratar%20el%20plan%20${encodeURIComponent(plan.nombre)}%20de%20SoluMed`,
+                        `${WHATSAPP}&text=Hola%2C%20quiero%20contratar%20el%20plan%20${encodeURIComponent(plan.nombre)}%20de%20NexoFarma`,
                         '_blank'
                       )}
                     >
@@ -647,7 +647,7 @@ export default function InfoPage() {
         {/* POR QUÉ SOLUMED */}
         <section className="section" style={{background:'white'}}>
           <div className="section-inner">
-            <div className="section-tag">// por qué solumed</div>
+            <div className="section-tag">// por qué NexoFarma</div>
             <h2 className="section-title">Hecho para droguerías<br />colombianas</h2>
             <div className="porque-grid" style={{marginTop:48}}>
               {[
@@ -718,12 +718,12 @@ export default function InfoPage() {
 
         {/* FOOTER */}
         <footer className="footer">
-          <div className="footer-logo">Solu<span>Med</span></div>
+          <div className="footer-logo">Nexo<span>Farma</span></div>
           <p className="footer-copy" style={{marginTop:8}}>
             Software de recepción técnica para droguerías colombianas · +57 318 799 3643
           </p>
           <p className="footer-copy" style={{marginTop:4}}>
-            © {new Date().getFullYear()} SoluMed · Todos los derechos reservados
+            © {new Date().getFullYear()} NexoFarma · Todos los derechos reservados
           </p>
         </footer>
 

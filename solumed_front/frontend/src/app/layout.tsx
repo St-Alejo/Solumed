@@ -22,8 +22,13 @@ const firaCode = Fira_Code({
 });
 
 export const metadata: Metadata = {
-  title: "SoluMed — Recepción Técnica",
+  title: "NexoFarma — Recepción Técnica",
   description: "Sistema SaaS de recepción técnica de medicamentos para farmacias colombianas",
+  icons: {
+    icon: "/icon.png",
+    shortcut: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -71,7 +71,7 @@ export default function Sidebar() {
             <FlaskConical size={18} color="#fff" />
           </div>
           <div style={{ minWidth: 0 }}>
-            <p style={{ color: "#f1f5f9", fontSize: 14, fontWeight: 800, letterSpacing: "-.01em", lineHeight: 1.2 }}>SoluMed</p>
+            <p style={{ color: "#f1f5f9", fontSize: 14, fontWeight: 800, letterSpacing: "-.01em", lineHeight: 1.2 }}>NexoFarma</p>
             <p style={{ color: "#334155", fontSize: 11, marginTop: 1 }}>Recepción Técnica</p>
           </div>
         </div>
@@ -259,7 +259,7 @@ export default function Sidebar() {
           }}>
             <FlaskConical size={15} color="#fff" />
           </div>
-          <p>Solu<span>Med</span></p>
+          <p>Nexo<span>Farma</span></p>
         </div>
         <div className="topbar-right">
           {/* Toggle tema en topbar móvil */}
