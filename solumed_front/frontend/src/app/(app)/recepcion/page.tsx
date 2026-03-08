@@ -125,6 +125,14 @@ export default function RecepcionPage() {
     }));
   };
 
+  // ── Quitar un producto de la lista (antes de guardar) ─────────
+  const quitarProducto = (facturaId: string, idx: number) => {
+    setFacturas(prev => prev.map(f => {
+      if (f.id !== facturaId) return f;
+      return { ...f, productos: f.productos.filter((_, i) => i !== idx) };
+    }));
+  };
+
   // ── Guardar una factura ───────────────────────────────────────
   const guardarUna = async (item: FacturaItem) => {
     if (!item.facturaId.trim()) { toast("error", "Ingresa el N° de factura"); return; }
@@ -357,6 +365,20 @@ export default function RecepcionPage() {
                           </div>
                           <span className={`badge ${colorEstadoInvima(p.estado_invima)} col-hide-mobile`}>{p.estado_invima || "—"}</span>
                           <span className={`badge ${colorCumple(p.cumple)}`}>{p.cumple}</span>
+                          <button
+                            title="Quitar producto"
+                            onClick={e => { e.stopPropagation(); quitarProducto(item.id, idx); }}
+                            style={{
+                              background: "none", border: "none", cursor: "pointer",
+                              color: "var(--red)", padding: "2px 4px", borderRadius: 4,
+                              display: "flex", alignItems: "center", flexShrink: 0,
+                              opacity: 0.7, transition: "opacity .15s",
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                            onMouseLeave={e => (e.currentTarget.style.opacity = "0.7")}
+                          >
+                            <X size={14} />
+                          </button>
                           {isProdExp ? <ChevronUp size={14} color="var(--text4)" /> : <ChevronDown size={14} color="var(--text4)" />}
                         </div>
 
