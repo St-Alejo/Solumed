@@ -112,11 +112,13 @@ def _extraer_palabras_clave(termino: str) -> list[str]:
     """
     Extrae palabras útiles de un nombre de producto como viene en facturas.
     Elimina: prefijos 'x', cantidades (500MG, X10), formas farm., presentaciones.
-    Ej: 'x Raydol'                     → ['Raydol']
-    Ej: 'CIPROFLOXACINO 500MG TAB X10' → ['CIPROFLOXACINO']
-    Ej: 'VITATRIOL X5ML NEO+POLIM'     → ['VITATRIOL', 'NEO', 'POLIM']
+    También quita paréntesis y corchetes de cada token.
+    Ej: 'LANSOPRAZOL (DIZOMOPRAZ) 30MG TAB' → ['LANSOPRAZOL', 'DIZOMOPRAZ']
+    Ej: 'CIPROFLOXACINO 500MG TAB X10'      → ['CIPROFLOXACINO']
     """
     t = _normalizar_termino(termino)
+    # Quitar paréntesis/corchetes ANTES de dividir
+    t = re.sub(r'[()\[\]{}]', ' ', t)
     partes = re.split(r'[\s\+\-/\,;]+', t)
     IGNORAR = re.compile(
         r'^(\d[\w]*|\d+[xX]\w*|[xX]\d+\w*'          # números y presentaciones X10, 5ML
@@ -136,6 +138,17 @@ def _extraer_palabras_clave(termino: str) -> list[str]:
             continue
         resultado.append(p)
     return resultado
+
+
+def _limpiar_kw(kw: str) -> str:
+    """Limpia un término de búsqueda: quita paréntesis, puntos y caracteres especiales
+    que pueden romper la query de Socrata."""
+    # Quitar paréntesis, corchetes, puntos, asteriscos
+    limpio = re.sub(r'[()\[\]{}./*+]', ' ', kw)
+    # Colapsar espacios
+    limpio = re.sub(r'\s+', ' ', limpio).strip()
+    # Escapar comilla simple para SQL LIKE
+    return limpio.replace("'", "''")
 
 
 def _normalizar_medicamento(d: dict, estado_override: str = None) -> dict:
@@ -358,7 +371,12 @@ def _generar_candidatos(palabras: list[str]) -> list[str]:
 
 async def _buscar_kw_medicamento(kw: str, nombre_ref: str) -> Optional[dict]:
     """Busca una palabra clave en medicamentos (vigentes + renovacion). Devuelve el primer resultado relevante."""
-    kw_safe = kw.replace("'", "''")
+    kw_safe = _limpiar_kw(kw)
+    if not kw_safe:
+        return None
+    # Prefijo de 7 chars para búsqueda tolerante a typos OCR (SUCRALFALATO → SUCRALFA → SUCRALFATO)
+    prefijo = kw_safe[:7] if len(kw_safe) >= 8 else None
+
     async with httpx.AsyncClient(headers=_headers(), timeout=15) as c:
         for dataset in ("vigentes", "renovacion"):
             url = f"{BASE_SOCRATA}/{DATASETS[dataset]}.json"
@@ -372,7 +390,7 @@ async def _buscar_kw_medicamento(kw: str, nombre_ref: str) -> Optional[dict]:
                         return norm
             except Exception:
                 pass
-            # Estrategia B: LIKE en campo producto
+            # Estrategia B: LIKE en campo producto (búsqueda exacta)
             try:
                 r = await c.get(url, params={
                     "$where": f"upper(producto) like upper('%{kw_safe}%')",
@@ -386,13 +404,32 @@ async def _buscar_kw_medicamento(kw: str, nombre_ref: str) -> Optional[dict]:
                         return norm
             except Exception:
                 pass
+            # Estrategia C: LIKE por prefijo (tolera typos de 1-2 letras al final)
+            if prefijo:
+                try:
+                    r = await c.get(url, params={
+                        "$where": f"upper(producto) like upper('%{prefijo}%')",
+                        "$limit": "3",
+                        "$order": "producto ASC",
+                    })
+                    r.raise_for_status()
+                    for item in r.json():
+                        norm = _normalizar_medicamento(item)
+                        if _resultado_relevante(nombre_ref, norm):
+                            return norm
+                except Exception:
+                    pass
     return None
 
 
 async def _buscar_kw_dispositivo(kw: str, nombre_ref: str) -> Optional[dict]:
     """Busca una palabra clave en dispositivos médicos. Devuelve el primer resultado relevante."""
     url = f"{BASE_SOCRATA}/{DATASETS['dispositivos']}.json"
-    kw_safe = kw.replace("'", "''")
+    kw_safe = _limpiar_kw(kw)
+    if not kw_safe:
+        return None
+    prefijo = kw_safe[:7] if len(kw_safe) >= 8 else None
+
     async with httpx.AsyncClient(headers=_headers(), timeout=15) as c:
         # Estrategia A: $q full-text
         try:
@@ -417,6 +454,20 @@ async def _buscar_kw_dispositivo(kw: str, nombre_ref: str) -> Optional[dict]:
                     return norm
         except Exception:
             pass
+        # Estrategia C: LIKE por prefijo en nombretecnico
+        if prefijo:
+            try:
+                r = await c.get(url, params={
+                    "$where": f"upper(nombretecnico) like upper('%{prefijo}%')",
+                    "$limit": "3",
+                })
+                r.raise_for_status()
+                for item in r.json():
+                    norm = _normalizar_dispositivo(item)
+                    if _resultado_relevante(nombre_ref, norm):
+                        return norm
+            except Exception:
+                pass
     return None
 
 
