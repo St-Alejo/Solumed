@@ -49,9 +49,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Topbar móvil admin */}
         <div className="topbar-mobile" style={{ background: "#0a0f1a" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 30, height: 30, borderRadius: 8, background: "linear-gradient(135deg,#7c3aed,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <FlaskConical size={14} color="#fff" />
-            </div>
+            <img
+              src="/icon.png"
+              alt="NexoFarma"
+              style={{ width: 30, height: 30, borderRadius: 8, objectFit: "contain" }}
+            />
             <span style={{ color: "#f1f5f9", fontWeight: 800, fontSize: 14 }}>NexoFarma Admin</span>
           </div>
           {/* Salir siempre visible en móvil */}
@@ -84,9 +86,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {/* Header con X */}
           <div style={{ padding: "20px 16px 14px", borderBottom: "1px solid rgba(255,255,255,.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 9, background: "linear-gradient(135deg,#7c3aed,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <FlaskConical size={16} color="#fff" />
-              </div>
+              <img
+                src="/icon.png"
+                alt="NexoFarma"
+                style={{ width: 36, height: 36, borderRadius: 9, objectFit: "contain" }}
+              />
               <div>
                 <p style={{ color: "#f1f5f9", fontSize: 13, fontWeight: 800 }}>NexoFarma Admin</p>
                 <p style={{ color: "#475569", fontSize: 10 }}>Panel superadmin</p>

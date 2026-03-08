@@ -62,14 +62,11 @@ export default function Sidebar() {
       {/* Logo + cerrar (móvil) */}
       <div style={{ padding: "20px 16px 14px", borderBottom: "1px solid rgba(255,255,255,.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-          <div style={{
-            width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-            background: "linear-gradient(135deg,#2563eb,#60a5fa)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 4px 14px rgba(37,99,235,.45)",
-          }}>
-            <FlaskConical size={18} color="#fff" />
-          </div>
+          <img
+            src="/icon.png"
+            alt="NexoFarma"
+            style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, objectFit: "contain" }}
+          />
           <div style={{ minWidth: 0 }}>
             <p style={{ color: "#f1f5f9", fontSize: 14, fontWeight: 800, letterSpacing: "-.01em", lineHeight: 1.2 }}>NexoFarma</p>
             <p style={{ color: "#334155", fontSize: 11, marginTop: 1 }}>Recepción Técnica</p>
@@ -252,13 +249,11 @@ export default function Sidebar() {
       {/* Topbar móvil */}
       <div className="topbar-mobile">
         <div className="topbar-mobile-logo">
-          <div style={{
-            width: 32, height: 32, borderRadius: 8,
-            background: "linear-gradient(135deg,#2563eb,#60a5fa)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <FlaskConical size={15} color="#fff" />
-          </div>
+          <img
+            src="/icon.png"
+            alt="NexoFarma"
+            style={{ width: 32, height: 32, borderRadius: 8, objectFit: "contain" }}
+          />
           <p>Nexo<span>Farma</span></p>
         </div>
         <div className="topbar-right">
