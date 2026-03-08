@@ -363,7 +363,7 @@ export default function RecepcionPage() {
                               Lote: {p.lote || "—"} · Vence: {p.vencimiento || "—"} · Cant: {p.cantidad}
                             </p>
                           </div>
-                          <span className={`badge ${colorEstadoInvima(p.estado_invima)} col-hide-mobile`}>{p.estado_invima || "—"}</span>
+                          <span className={`badge ${colorEstadoInvima(p.estado_invima)}`}>{p.estado_invima || "—"}</span>
                           <span className={`badge ${colorCumple(p.cumple)}`}>{p.cumple}</span>
                           <button
                             title="Quitar producto"
