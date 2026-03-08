@@ -489,6 +489,36 @@ def listar_drogerias() -> list[dict]:
     """)
 
 
+def listar_drogerias_por_gerente(distributor_id: int) -> list[dict]:
+    """Droguerías creadas por un gerente distribuidor específico."""
+    return _fetch_all("""
+        SELECT d.*,
+               l.plan          AS lic_plan,
+               l.estado        AS lic_estado,
+               l.vencimiento   AS lic_vencimiento,
+               l.max_usuarios  AS lic_max_usuarios,
+               COUNT(DISTINCT u.id) AS total_usuarios,
+               COUNT(DISTINCT h.id) AS total_recepciones
+        FROM drogerias d
+        LEFT JOIN licencias l
+            ON l.drogeria_id = d.id
+            AND l.estado = 'activa'
+            AND l.id = (
+                SELECT id FROM licencias
+                WHERE drogeria_id = d.id AND estado = 'activa'
+                ORDER BY id DESC LIMIT 1
+            )
+        LEFT JOIN usuarios u ON u.drogeria_id = d.id AND u.activo IS TRUE
+        LEFT JOIN historial h ON h.drogeria_id = d.id
+        WHERE d.creada_por_id = %s
+        GROUP BY d.id, d.nombre, d.nit, d.ciudad, d.direccion, d.telefono,
+                 d.email, d.logo_url, d.activa, d.creada_en,
+                 d.creada_por_id, d.creada_por_rol,
+                 l.plan, l.estado, l.vencimiento, l.max_usuarios
+        ORDER BY d.nombre
+    """, (distributor_id,))
+
+
 def actualizar_drogeria(did: int, **campos):
     sets = ", ".join(f"{k}=?" for k in campos)
     _execute(f"UPDATE drogerias SET {sets} WHERE id=?",
