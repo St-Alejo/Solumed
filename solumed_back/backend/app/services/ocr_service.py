@@ -474,126 +474,143 @@ def _parsear_generico(lineas: list[str]) -> list[dict]:
 
 def _parsear_jabes(lineas: list[str]) -> list[dict]:
     """
-    Formato Distribuciones JABES SAS (y distribuidoras similares).
+    Formato JABES SAS y distribuidoras similares.
     Columnas: REF. | DETALLE | LOTE | REG.SANIT. | F.VENCE | %IVA | CANT. | VR/UNIT | VR/TOTAL
 
-    Caractírísticas:
-    - REF es un código numérico de 4-6 dígitos (p.ej. 03238)
-    - DETALLE puede ser multilínea (el nombre del producto a veces ocupa 2 renglones)
-    - REG.SANIT. puede ser "2021M-0013188-R1" (sin prefijo INVIMA en la factura)
-    - F.VENCE formato MM-DD-YYYY o YYYY-MM (según digitalización)
-    - CANT. es la cantidad de unidades
+    ESTRATEGIA por bloques:
+      pypdfium2 puede extraer tablas con cada columna en su propia línea.
+      En vez de exigir una línea compacta, agrupamos todo el texto entre
+      un REF y el siguiente, y luego extraemos campos con regex específicos.
     """
-    # Patron de línea principal JABES:
-    # 03238  TRAMADOL 100MG/2ML C X 10 AMP VITALIS CAJA  A250892  2021M-0013188-R1  11-30-2027  3.00  25,583.33  76,750.00
-    # Los campos pueden alinearse con espacios múltiples (columnas fijas)
-    RE_JABES_PRINCIPAL = re.compile(
-        r'^(\d{4,6})\s+'           # REF (código numérico 4-6 dígitos)
-        r'(.+?)\s+'                # DETALLE (nombre producto, greedy hasta lote)
-        r'(\S{4,12})\s+'           # LOTE (alfanumérico, ej: A250892, 0590-0224)
-        r'(\d{4}[A-Z]{1,2}-\d{7,10}(?:-R\d)?)\s+'  # REG.SANIT (ej: 2021M-0013188-R1)
-        r'(\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2})\s+'  # F.VENCE
-        r'(?:[\d.,]+\s+)?'         # %IVA (opcional)
-        r'([\d.,]+)\s+'            # CANT
-        r'[\d.,]+\s+'              # VR/UNIT
-        r'[\d.,]+'                 # VR/TOTAL
-    )
-    # Patron relaxado: solo REF + nombre (para líneas donde el detalle se parte en 2 renglones)
-    RE_JABES_REF_SOLO = re.compile(r'^(\d{4,6})\s+(.{8,}?)\s*$')
+    RE_REF_INICIO   = re.compile(r'^(\d{4,6})\b')
+    RE_REG_SANIT    = re.compile(r'(\d{4}[A-Z]{1,2}-\d{5,10}(?:-R\d)?)\b', re.IGNORECASE)
+    RE_FECHA_JABES  = re.compile(r'\b(\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2})\b')
+    RE_PRECIO       = re.compile(r'\b\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\b')
+    RE_LOTE_TOKEN   = re.compile(r'\b([A-Z0-9]{2,4}\d{4,9}|[0-9]{4}-[0-9]{4}|[A-Z]{1,3}\d{3,9}[A-Z]?)\b')
+    RE_SOLO_NUMEROS = re.compile(r'^\d+([.,]\d+)?$')
 
-    productos = []
-    producto_actual = None
+    # ── 1. Delimitar la sección de tabla ─────────────────────────
     en_tabla = False
-    continuacion = False  # la línea anterior fue REF incompleta
+    lineas_tabla: list[str] = []
 
     for linea in lineas:
-        linea = linea.strip()
-        if not linea:
-            continuacion = False
+        ls = linea.strip()
+        if not ls:
+            if en_tabla:
+                lineas_tabla.append("")
             continue
 
-        # Detectar cabecera JABES
-        if RE_CABECERA_JABES.search(linea) or re.search(r'REF\.\s+DETALLE', linea, re.IGNORECASE):
+        # Cabecera de tabla JABES
+        if (RE_CABECERA_JABES.search(ls)
+                or re.search(r'\bREF\.?\s+DETALLE\b', ls, re.IGNORECASE)
+                or re.search(r'\bDETALLE\b.+\bLOTE\b.+\bREG', ls, re.IGNORECASE)):
             en_tabla = True
-            continuacion = False
             continue
 
-        if en_tabla and RE_PIE.search(linea):
-            if producto_actual:
-                productos.append(producto_actual)
-                producto_actual = None
-            en_tabla = False
-            continue
+        if en_tabla and RE_PIE.search(ls):
+            break
 
-        if not en_tabla:
-            continue
+        if en_tabla:
+            lineas_tabla.append(ls)
 
-        # Ignorar obsequios/muestras
-        if RE_OBSEQUIO.search(linea):
-            continuacion = False
-            continue
+    # ── 2. Agrupar líneas por bloque de producto ──────────────────
+    # Cada bloque empieza con una línea que inicia con el código REF (4-6 dígitos)
+    bloques: list[list[str]] = []
+    bloque_actual: list[str] = []
 
-        # Intentar match completo
-        m = RE_JABES_PRINCIPAL.match(linea)
+    for linea in lineas_tabla:
+        m = RE_REF_INICIO.match(linea)
         if m:
-            if producto_actual:
-                productos.append(producto_actual)
+            if bloque_actual:
+                bloques.append(bloque_actual)
+            bloque_actual = [linea]
+        elif bloque_actual:
+            bloque_actual.append(linea)
 
-            # Normalizar vencimiento a YYYY-MM
-            venc_raw = m.group(5).strip()
-            venc = _normalizar_fecha_jabes(venc_raw)
+    if bloque_actual:
+        bloques.append(bloque_actual)
 
-            # Normalizar registro sanitario
-            rs = m.group(4).strip()
-            if not rs.upper().startswith("INVIMA"):
-                rs = f"INVIMA {rs}"
+    # ── 3. Extraer campos de cada bloque ──────────────────────────
+    productos: list[dict] = []
 
-            # Normalizar cantidad (puede venir como "3.00")
-            cant_str = m.group(6).replace(',', '.').split('.')[0]
-            try:
-                cantidad = int(float(cant_str))
-            except Exception:
-                cantidad = 1
+    for bloque in bloques:
+        texto = " ".join(t for t in bloque if t)
 
-            producto_actual = {
-                'codigo_producto':            m.group(1).strip(),
-                'nombre_producto':            m.group(2).strip(),
-                'lote':                       m.group(3).strip().upper(),
-                'vencimiento':                venc,
-                'cantidad':                   cantidad,
-                'registro_sanitario_factura': rs,
-            }
-            continuacion = False
+        if RE_OBSEQUIO.search(texto):
             continue
 
-        # Si no hubo match completo, intentar extender nombre de producto anterior
-        # (el DETALLE a veces ocupa 2 renglones)
-        if continuacion and producto_actual and not re.match(r'^\d{4,6}\s', linea):
-            # La línea es continuación del nombre del producto
-            producto_actual['nombre_producto'] += ' ' + linea
+        # REF
+        ref_m = RE_REF_INICIO.match(bloque[0])
+        ref = ref_m.group(1) if ref_m else ""
+
+        # Registro sanitario: patrón XXXX[A-Z]-XXXXXXXX[-R1]
+        rs_m = RE_REG_SANIT.search(texto)
+        rs_raw = rs_m.group(1) if rs_m else ""
+        rs = f"INVIMA {rs_raw}" if rs_raw and not rs_raw.upper().startswith("INVIMA") else rs_raw
+
+        # Vencimiento
+        fecha_m = RE_FECHA_JABES.search(texto)
+        venc = _normalizar_fecha_jabes(fecha_m.group(1)) if fecha_m else ""
+
+        # Precios: números con punto/coma de millar (ej: 25,583.33 o 76.750,00)
+        precios = RE_PRECIO.findall(texto)
+
+        # Texto limpio: quitar REF, RS, fecha, precios
+        texto_limpio = texto
+        if ref:
+            texto_limpio = re.sub(r'^\s*' + re.escape(ref) + r'\s*', '', texto_limpio, count=1)
+        if rs_m:
+            texto_limpio = texto_limpio.replace(rs_m.group(1), "", 1)
+        if fecha_m:
+            texto_limpio = texto_limpio.replace(fecha_m.group(1), "", 1)
+        for precio in precios:
+            texto_limpio = texto_limpio.replace(precio, "", 1)
+
+        # Lote: token alfanumérico corto antes del registro sanitario
+        lote = ""
+        lote_m = RE_LOTE_TOKEN.search(texto_limpio)
+        if lote_m:
+            tok = lote_m.group(1)
+            # Evitar capturar parte del nombre del producto (debe ser corto y no frase)
+            if len(tok) <= 12 and not re.search(r'\s', tok):
+                lote = tok.upper()
+                texto_limpio = texto_limpio.replace(lote_m.group(0), "", 1)
+
+        # Cantidad: el primer número entero razonable (1-9999) que quede suelto
+        cant = 1
+        tokens = texto_limpio.split()
+        for i, tok in enumerate(tokens):
+            tok_c = tok.replace(",", ".").rstrip(".")
+            if RE_SOLO_NUMEROS.match(tok):
+                try:
+                    v = float(tok_c)
+                    if 1 <= v <= 9999:
+                        cant = int(v)
+                        tokens[i] = ""
+                        break
+                except ValueError:
+                    pass
+        texto_limpio = " ".join(t for t in tokens if t)
+
+        # Nombre: limpiar espacios extra y números residuales al final
+        nombre = re.sub(r'\s{2,}', ' ', texto_limpio).strip()
+        nombre = re.sub(r'\s*\d+\s*$', '', nombre).strip()   # número al final
+        nombre = re.sub(r'^\s*\d+\s+', '', nombre).strip()   # número al inicio
+
+        if len(nombre) < 5:
             continue
 
-        # Tentativa: solo REF + nombre parcial (data aún incompleta en siguiente línea)
-        m_ref = RE_JABES_REF_SOLO.match(linea)
-        if m_ref and not re.search(r'\d{4}-\d{2}', linea):
-            if producto_actual:
-                productos.append(producto_actual)
-            producto_actual = {
-                'codigo_producto':            m_ref.group(1).strip(),
-                'nombre_producto':            m_ref.group(2).strip(),
-                'lote':                       '',
-                'vencimiento':                '',
-                'cantidad':                   1,
-                'registro_sanitario_factura': '',
-            }
-            continuacion = True
-            continue
+        productos.append({
+            "codigo_producto":            ref,
+            "nombre_producto":            nombre,
+            "lote":                       lote,
+            "vencimiento":                venc,
+            "cantidad":                   cant,
+            "registro_sanitario_factura": rs,
+        })
 
-    if producto_actual:
-        productos.append(producto_actual)
+    return productos
 
-    # Filtrar productos incompletos (sin nombre o con nombre muy corto)
-    return [p for p in productos if len(p.get('nombre_producto', '')) >= 5]
 
 
 def _normalizar_fecha_jabes(fecha: str) -> str:
@@ -746,6 +763,20 @@ async def procesar_factura(
         lineas = _extraer_texto_pdf_digital(ruta)
         prog(50, f"{len(lineas)} líneas — buscando productos...")
         productos_base, f_id, f_prov = _parsear_lineas(lineas, ruta)
+
+        # Fallback: si el parser no encontró productos (tablas PDF complejas),
+        # usar IA visual que siempre lee correctamente
+        if not productos_base:
+            prog(55, "Parser no encontró productos — reintentando con IA visual...")
+            try:
+                productos_base, f_id_ia, f_prov_ia = _extraer_productos_con_ia(ruta)
+                if not f_id:
+                    f_id = f_id_ia
+                if not f_prov:
+                    f_prov = f_prov_ia
+                prog(65, f"{len(productos_base)} productos extraídos por IA (fallback)...")
+            except Exception as e_ia:
+                prog(65, f"IA fallback falló: {e_ia}")
     else:
         # PDF escaneado o imagen → Claude Vision
         prog(15, "Enviando a IA para lectura inteligente...")
