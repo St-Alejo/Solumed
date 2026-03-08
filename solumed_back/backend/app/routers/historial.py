@@ -57,14 +57,14 @@ def estadisticas(u: dict = Depends(require_licencia_activa)):
 def listar_facturas(u: dict = Depends(require_licencia_activa)):
     from app.core.database import _fetch_all, _adapt_query
     facturas = _fetch_all(_adapt_query("""
-        SELECT factura_id, proveedor, fecha_proceso,
+        SELECT factura_id, proveedor, MAX(fecha_proceso) AS fecha_proceso,
                COUNT(*) AS total_productos,
                SUM(CASE WHEN cumple='Acepta' THEN 1 ELSE 0 END) AS aceptados,
-               ruta_pdf
+               MAX(ruta_pdf) AS ruta_pdf
         FROM historial
         WHERE drogeria_id = ?
-        GROUP BY factura_id
-        ORDER BY fecha_proceso DESC
+        GROUP BY factura_id, proveedor
+        ORDER BY MAX(fecha_proceso) DESC
         LIMIT 100
     """), (u["drogeria_id"],))
     return {"ok": True, "facturas": facturas}
