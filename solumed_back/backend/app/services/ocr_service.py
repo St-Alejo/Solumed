@@ -23,7 +23,7 @@ def _pdf_tiene_texto(ruta: str) -> bool:
         import pypdfium2 as pdfium
         doc = pdfium.PdfDocument(str(ruta))
         tp = doc[0].get_textpage()
-        txt = tp.get_text_range()
+        txt = tp.get_text_bounded()
         tp.close()
         doc.close()
         return len(txt.strip()) > 50
@@ -37,7 +37,7 @@ def _extraer_texto_pdf_digital(ruta: str) -> list[str]:
     lineas = []
     for page in doc:
         tp = page.get_textpage()
-        texto = tp.get_text_range()
+        texto = tp.get_text_bounded()
         tp.close()
         lineas += [l.strip() for l in texto.splitlines() if l.strip()]
     doc.close()
@@ -47,18 +47,13 @@ def _extraer_texto_pdf_digital(ruta: str) -> list[str]:
 # ── Extracción con Claude Vision (escaneados/imágenes) ─────────
 
 def _extraer_productos_con_ia(ruta: str) -> tuple[list[dict], str, str]:
-    """
-    Envia el archivo a Google Gemini Vision y obtiene productos estructurados.
-    Gemini Flash es economico y tiene capa gratuita generosa.
-    """
     import httpx
     import io
     from PIL import Image as PILImage
 
     ext = Path(ruta).suffix.lower()
-
-    # Convertir a imagenes JPEG (una por pagina)
     imagenes_b64 = []
+
     if ext == ".pdf":
         try:
             from pdf2image import convert_from_path
@@ -69,7 +64,6 @@ def _extraer_productos_con_ia(ruta: str) -> tuple[list[dict], str, str]:
             paginas = [page.render(scale=2.0).to_pil() for page in doc]
             doc.close()
         for pag in paginas:
-            # Reducir si es muy grande (limite API ~5MB por imagen)
             w, h = pag.size
             if w > 1600 or h > 2200:
                 pag = pag.resize((min(w, 1600), min(h, 2200)), PILImage.LANCZOS)
@@ -84,14 +78,6 @@ def _extraer_productos_con_ia(ruta: str) -> tuple[list[dict], str, str]:
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=80)
         imagenes_b64.append(base64.standard_b64encode(buf.getvalue()).decode())
-
-    # Construir bloques de contenido (una imagen por pagina)
-    content_blocks = []
-    for img_b64 in imagenes_b64:
-        content_blocks.append({
-            "type": "image",
-            "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}
-        })
 
     prompt = """Eres un experto en facturas farmacéuticas colombianas. Extrae el N° de factura, el nombre del proveedor y TODOS los productos de esta factura.
 
@@ -119,7 +105,6 @@ Reglas estrictas:
 - NO incluir productos marcados como OBS, obsequio o muestra médica
 - NO incluir líneas de totales, subtotales, impuestos ni notas"""
 
-    # ── Llamada a Claude Haiku (economico, ~$0.003 por factura) ──
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY no configurada en variables de entorno de Railway")
@@ -165,7 +150,6 @@ Reglas estrictas:
     except (KeyError, IndexError):
         raise RuntimeError(f"Respuesta inesperada de Claude: {data}")
 
-    # Limpiar posibles bloques markdown
     texto = re.sub(r"```(?:json)?\s*", "", texto)
     texto = re.sub(r"```", "", texto)
     texto = texto.strip()
@@ -174,7 +158,7 @@ Reglas estrictas:
         data_json = json.loads(texto)
     except Exception:
         data_json = {"productos": []}
-    
+
     if isinstance(data_json, list):
         productos_raw = data_json
         factura_id = ""
@@ -184,7 +168,6 @@ Reglas estrictas:
         factura_id = str(data_json.get("factura_id", "")).strip()
         proveedor = str(data_json.get("proveedor", "")).strip()
 
-    # Normalizar al formato interno
     productos = []
     for p in productos_raw:
         nombre = str(p.get("nombre", "")).strip()
@@ -194,7 +177,6 @@ Reglas estrictas:
         if rs and not rs.upper().startswith("INVIMA"):
             rs = f"INVIMA {rs}"
         venc = str(p.get("vencimiento", "")).strip()
-        # Asegurar formato YYYY-MM
         if re.match(r'\d{4}-\d{2}-\d{2}', venc):
             venc = venc[:7]
         productos.append({
@@ -207,7 +189,6 @@ Reglas estrictas:
         })
 
     return productos, factura_id, proveedor
-
 
 
 # ── Patrones regex (PDF digital) ──────────────────────────────
@@ -232,10 +213,6 @@ RE_OBSEQUIO = re.compile(r'\bOBS\b|\bOBSEQUIO\b|\bMUESTRA\b', re.IGNORECASE)
 RE_CABECERA = re.compile(
     r'CODIGO.+DESCRIPCI[OÓ]N|DESCRIPCI[OÓ]N.+LOTE|PRODUCTO.+CANTIDAD'
     r'|REF\.?.+DETALLE.+LOTE|REF\.?.+LOTE.+REG',
-    re.IGNORECASE
-)
-RE_CABECERA_JABES = re.compile(
-    r'REF\.?\s.+DETALLE|DETALLE.+LOTE.+REG\.?SANIT|REF\.?\s+DETALLE\s+LOTE',
     re.IGNORECASE
 )
 RE_PIE = re.compile(
@@ -267,8 +244,6 @@ RE_LINEA_ADMIN = re.compile(
     r'SUBTOTAL|DESCUENTO|RETENCION|\bRTE\b|ANTICIPO)',
     re.IGNORECASE
 )
-RE_LOTE_FV = re.compile(r'(\d{4}-\d{2})', re.IGNORECASE)
-RE_CANTIDAD = re.compile(r'\b(\d{1,4})\b')
 
 
 def _es_nombre_medicamento(linea: str) -> bool:
@@ -383,7 +358,6 @@ def _parsear_formato_b(lineas: list[str]) -> list[dict]:
 
 
 def _parsear_distrimayor(lineas: list[str]) -> list[dict]:
-    """Formato Distrimayor electrónica (PDF digital)."""
     RE_DIST = re.compile(
         r'^ *(\d{4,7}\*?)\s+'
         r'(.+?)\s+'
@@ -454,6 +428,123 @@ def _parsear_distrimayor(lineas: list[str]) -> list[dict]:
     return productos
 
 
+def _parsear_jabes(lineas: list[str]) -> list[dict]:
+    """
+    Formato JABES SAS — estructura real de pypdfium2:
+      CANT.XX
+      CODIGO NOMBRE... VR/UNIT VR/TOTAL
+      [continuacion nombre...]
+      LOTE RS FECHA [IVA%]
+    """
+    RE_CANT_SOLA = re.compile(r'^\d{1,3}(?:\.\d{2})?$')
+    RE_PROD      = re.compile(r'^(\d{4,6})\s+(.+?)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$')
+    RE_LOTE_RS   = re.compile(
+        r'^(\S+)\s+'
+        r'((?:\d{4}[A-Z]{0,2}-{1,2}\d{4,}[-\w]*)|N/R|(?:SD\d{4}-\d{6,})|(?:NSOC\S+))\s+'
+        r'(\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2})\s*(\d+)?\s*$',
+        re.IGNORECASE
+    )
+    RE_PIE_J = re.compile(
+        r'^(SubTot\.|CUFE:|Pasan\.\.\.|Vienen\.\.\.|NOTA:|Son:|OBSERVACIONES:'
+        r'|Base Impuesto|IVA\s+\d|TOTAL\$|Representaci|Fecha generaci)',
+        re.IGNORECASE
+    )
+
+    def _norm_fecha(f: str) -> str:
+        m = re.match(r'^(\d{2})-(\d{2})-(\d{4})$', f)
+        if m:
+            return f"{m.group(3)}-{m.group(1)}"
+        m = re.match(r'^(\d{4})-(\d{2})', f)
+        if m:
+            return f"{m.group(1)}-{m.group(2)}"
+        return f
+
+    productos: list[dict] = []
+    i = 0
+    en_tabla = False
+
+    while i < len(lineas):
+        l = lineas[i].strip()
+
+        # Activar tabla en cada página al ver la cabecera
+        if 'LOTE REG.SANIT. F.VENCE' in l:
+            en_tabla = True
+            i += 1
+            continue
+        if not en_tabla:
+            i += 1
+            continue
+        if RE_PIE_J.match(l):
+            en_tabla = False
+            i += 1
+            continue
+
+        if not RE_CANT_SOLA.match(l):
+            i += 1
+            continue
+
+        cant = int(float(l))
+        i += 1
+        if i >= len(lineas):
+            break
+        l2 = lineas[i].strip()
+        m_prod = RE_PROD.match(l2)
+        if not m_prod:
+            continue
+
+        codigo = m_prod.group(1)
+        nombre_parts = [m_prod.group(2).strip()]
+        i += 1
+
+        while i < len(lineas):
+            ln = lineas[i].strip()
+            if not ln:
+                i += 1
+                continue
+            if RE_CANT_SOLA.match(ln):
+                break
+            if RE_LOTE_RS.match(ln):
+                break
+            if ln in ('- -', '-') or re.match(r'^[-\s]+$', ln):
+                break
+            if RE_PIE_J.match(ln):
+                break
+            if RE_PROD.match(ln):
+                break
+            nombre_parts.append(ln)
+            i += 1
+
+        nombre = ' '.join(nombre_parts)
+        nombre = re.sub(r'\s+[\d,]+\.\d{2}\s*$', '', nombre).strip()
+
+        lote, rs, venc = '', '', ''
+        if i < len(lineas):
+            ll = lineas[i].strip()
+            if ll in ('- -', '-') or re.match(r'^[-\s]+$', ll):
+                i += 1
+            else:
+                m_lote = RE_LOTE_RS.match(ll)
+                if m_lote:
+                    lote = m_lote.group(1).upper()
+                    rs_raw = re.sub(r'-{2,}', '-', m_lote.group(2).strip())
+                    if rs_raw.upper() not in ('N/R', ''):
+                        rs = f"INVIMA {rs_raw}" if not rs_raw.upper().startswith('INVIMA') else rs_raw
+                    venc = _norm_fecha(m_lote.group(3))
+                    i += 1
+
+        if nombre and len(nombre) >= 4:
+            productos.append({
+                "codigo_producto":            codigo,
+                "nombre_producto":            nombre,
+                "lote":                       lote,
+                "vencimiento":                venc,
+                "cantidad":                   cant,
+                "registro_sanitario_factura": rs,
+            })
+
+    return productos
+
+
 def _parsear_generico(lineas: list[str]) -> list[dict]:
     resultado_a = _parsear_formato_a(lineas)
     if resultado_a:
@@ -472,174 +563,12 @@ def _parsear_generico(lineas: list[str]) -> list[dict]:
     return productos
 
 
-def _parsear_jabes(lineas: list[str]) -> list[dict]:
-    """
-    Formato JABES SAS y distribuidoras similares.
-    Columnas: REF. | DETALLE | LOTE | REG.SANIT. | F.VENCE | %IVA | CANT. | VR/UNIT | VR/TOTAL
-
-    ESTRATEGIA por bloques:
-      pypdfium2 puede extraer tablas con cada columna en su propia línea.
-      En vez de exigir una línea compacta, agrupamos todo el texto entre
-      un REF y el siguiente, y luego extraemos campos con regex específicos.
-    """
-    RE_REF_INICIO   = re.compile(r'^(\d{4,6})\b')
-    RE_REG_SANIT    = re.compile(r'(\d{4}[A-Z]{1,2}-\d{5,10}(?:-R\d)?)\b', re.IGNORECASE)
-    RE_FECHA_JABES  = re.compile(r'\b(\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2})\b')
-    RE_PRECIO       = re.compile(r'\b\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\b')
-    RE_LOTE_TOKEN   = re.compile(r'\b([A-Z0-9]{2,4}\d{4,9}|[0-9]{4}-[0-9]{4}|[A-Z]{1,3}\d{3,9}[A-Z]?)\b')
-    RE_SOLO_NUMEROS = re.compile(r'^\d+([.,]\d+)?$')
-
-    # ── 1. Delimitar la sección de tabla ─────────────────────────
-    en_tabla = False
-    lineas_tabla: list[str] = []
-
-    for linea in lineas:
-        ls = linea.strip()
-        if not ls:
-            if en_tabla:
-                lineas_tabla.append("")
-            continue
-
-        # Cabecera de tabla JABES
-        if (RE_CABECERA_JABES.search(ls)
-                or re.search(r'\bREF\.?\s+DETALLE\b', ls, re.IGNORECASE)
-                or re.search(r'\bDETALLE\b.+\bLOTE\b.+\bREG', ls, re.IGNORECASE)):
-            en_tabla = True
-            continue
-
-        if en_tabla and RE_PIE.search(ls):
-            break
-
-        if en_tabla:
-            lineas_tabla.append(ls)
-
-    # ── 2. Agrupar líneas por bloque de producto ──────────────────
-    # Cada bloque empieza con una línea que inicia con el código REF (4-6 dígitos)
-    bloques: list[list[str]] = []
-    bloque_actual: list[str] = []
-
-    for linea in lineas_tabla:
-        m = RE_REF_INICIO.match(linea)
-        if m:
-            if bloque_actual:
-                bloques.append(bloque_actual)
-            bloque_actual = [linea]
-        elif bloque_actual:
-            bloque_actual.append(linea)
-
-    if bloque_actual:
-        bloques.append(bloque_actual)
-
-    # ── 3. Extraer campos de cada bloque ──────────────────────────
-    productos: list[dict] = []
-
-    for bloque in bloques:
-        texto = " ".join(t for t in bloque if t)
-
-        if RE_OBSEQUIO.search(texto):
-            continue
-
-        # REF
-        ref_m = RE_REF_INICIO.match(bloque[0])
-        ref = ref_m.group(1) if ref_m else ""
-
-        # Registro sanitario: patrón XXXX[A-Z]-XXXXXXXX[-R1]
-        rs_m = RE_REG_SANIT.search(texto)
-        rs_raw = rs_m.group(1) if rs_m else ""
-        rs = f"INVIMA {rs_raw}" if rs_raw and not rs_raw.upper().startswith("INVIMA") else rs_raw
-
-        # Vencimiento
-        fecha_m = RE_FECHA_JABES.search(texto)
-        venc = _normalizar_fecha_jabes(fecha_m.group(1)) if fecha_m else ""
-
-        # Precios: números con punto/coma de millar (ej: 25,583.33 o 76.750,00)
-        precios = RE_PRECIO.findall(texto)
-
-        # Texto limpio: quitar REF, RS, fecha, precios
-        texto_limpio = texto
-        if ref:
-            texto_limpio = re.sub(r'^\s*' + re.escape(ref) + r'\s*', '', texto_limpio, count=1)
-        if rs_m:
-            texto_limpio = texto_limpio.replace(rs_m.group(1), "", 1)
-        if fecha_m:
-            texto_limpio = texto_limpio.replace(fecha_m.group(1), "", 1)
-        for precio in precios:
-            texto_limpio = texto_limpio.replace(precio, "", 1)
-
-        # Lote: token alfanumérico corto antes del registro sanitario
-        lote = ""
-        lote_m = RE_LOTE_TOKEN.search(texto_limpio)
-        if lote_m:
-            tok = lote_m.group(1)
-            # Evitar capturar parte del nombre del producto (debe ser corto y no frase)
-            if len(tok) <= 12 and not re.search(r'\s', tok):
-                lote = tok.upper()
-                texto_limpio = texto_limpio.replace(lote_m.group(0), "", 1)
-
-        # Cantidad: el primer número entero razonable (1-9999) que quede suelto
-        cant = 1
-        tokens = texto_limpio.split()
-        for i, tok in enumerate(tokens):
-            tok_c = tok.replace(",", ".").rstrip(".")
-            if RE_SOLO_NUMEROS.match(tok):
-                try:
-                    v = float(tok_c)
-                    if 1 <= v <= 9999:
-                        cant = int(v)
-                        tokens[i] = ""
-                        break
-                except ValueError:
-                    pass
-        texto_limpio = " ".join(t for t in tokens if t)
-
-        # Nombre: limpiar espacios extra y números residuales al final
-        nombre = re.sub(r'\s{2,}', ' ', texto_limpio).strip()
-        nombre = re.sub(r'\s*\d+\s*$', '', nombre).strip()   # número al final
-        nombre = re.sub(r'^\s*\d+\s+', '', nombre).strip()   # número al inicio
-
-        if len(nombre) < 5:
-            continue
-
-        productos.append({
-            "codigo_producto":            ref,
-            "nombre_producto":            nombre,
-            "lote":                       lote,
-            "vencimiento":                venc,
-            "cantidad":                   cant,
-            "registro_sanitario_factura": rs,
-        })
-
-    return productos
-
-
-
-def _normalizar_fecha_jabes(fecha: str) -> str:
-    """
-    Convierte fechas de formato JABES a YYYY-MM.
-    Soporta: MM-DD-YYYY, YYYY-MM-DD, YYYY-MM
-    """
-    # MM-DD-YYYY (formato americano que usa JABES: 11-30-2027)
-    m = re.match(r'^(\d{2})-(\d{2})-(\d{4})$', fecha)
-    if m:
-        return f"{m.group(3)}-{m.group(1)}"
-    # YYYY-MM-DD
-    m = re.match(r'^(\d{4})-(\d{2})-\d{2}$', fecha)
-    if m:
-        return f"{m.group(1)}-{m.group(2)}"
-    # YYYY-MM (ya está bien)
-    m = re.match(r'^(\d{4}-\d{2})$', fecha)
-    if m:
-        return fecha
-    return fecha
-
-
 def _detectar_formato(lineas: list[str]) -> str:
     cabecera = " ".join(lineas[:40]).upper()
     if "891.200.235" in cabecera or "DISTRIMAYOR" in cabecera:
         return "DISTRIMAYOR"
-    # JABES: detectar por NIT, nombre empresa, o cabecera de tabla característica
     if ("901354014" in cabecera or "JABES" in cabecera
-            or re.search(r'REF[\.\s]+DETALLE[\s]+LOTE', cabecera)):
+            or re.search(r'LOTE REG\.SANIT\. F\.VENCE', cabecera)):
         return "JABES"
     formato_a = sum(1 for l in lineas[:80] if RE_FORMATO_A.match(l.strip()))
     formato_b = sum(1 for l in lineas[:80] if RE_RS_CUM_VEN.search(l) and 'Reg.Sanit' in l)
@@ -651,24 +580,14 @@ def _detectar_formato(lineas: list[str]) -> str:
 
 
 def _extraer_metadatos_regex(lineas: list[str]) -> tuple[str, str]:
-    import re
     factura_id = ""
     proveedor = ""
-    # El numero de factura SIEMPRE debe contener al menos un digito
-    # Patrones de mayor a menor especificidad para facturas colombianas
     re_factura = re.compile(
         r'(?:'
-        # "FACTURA ... No. FE-12345" o "FACTURA ... # 000395"
         r'(?:FACTURA(?:\s+ELECTR[OI]NICA)?(?:\s+DE\s+VENTA)?)\s*(?:N[Oo]\.?|NUMERO|#|No\.?)?\s*:?\s*([A-Z]{0,4}\s?\d[A-Z0-9\-\s]{2,19})'
-        r'|'
-        # "No. FACTURA: FVE-000395"
-        r'(?:N[Oo]\.?|#)\s*(?:DE\s+)?FACTURA\s*:?\s*([A-Z]{0,4}\d[A-Z0-9\-]{2,19})'
-        r'|'
-        # "FVE-000395318" o "FVE 000395318" aparece solo
-        r'\b(FVE[-_\s]?\d{5,15})\b'
-        r'|'
-        # "FE-12345" o "FE 12345" aparece solo
-        r'\b(FE[-_\s]\d{4,10})\b'
+        r'|(?:N[Oo]\.?|#)\s*(?:DE\s+)?FACTURA\s*:?\s*([A-Z]{0,4}\d[A-Z0-9\-]{2,19})'
+        r'|\b(FVE[-_\s]?\d{5,15})\b'
+        r'|\b(FE[-_\s]\d{4,10})\b'
         r')',
         re.IGNORECASE
     )
@@ -686,13 +605,9 @@ def _extraer_metadatos_regex(lineas: list[str]) -> tuple[str, str]:
             m = re_factura.search(txt)
             if m:
                 val = next((g for g in m.groups() if g), "").strip()
-                # Verificar que tenga al menos un digito (descartar palabras puras como "ELECTRONICA")
                 if val and any(c.isdigit() for c in val):
-                    # Normalizar: "FE 50624" → "FE-50624"
                     val = re.sub(r'^(FVE|FE)[-_\s]+', lambda mo: f"{mo.group(1).upper()}-", val, flags=re.IGNORECASE)
-                    # Quitar espacios internos residuales
-                    val = val.strip()
-                    factura_id = val
+                    factura_id = val.strip()
         if not proveedor and (re_empresa.search(txt) or re_nit.search(txt)):
             prov = re.sub(r'NIT.*', '', txt, flags=re.IGNORECASE).strip()
             prov = re.sub(r'\b(NIT|TEL|FAX|CALLE|CARRERA).*', '', prov, flags=re.IGNORECASE).strip()
@@ -703,8 +618,6 @@ def _extraer_metadatos_regex(lineas: list[str]) -> tuple[str, str]:
 
 
 def _extraer_id_desde_filename(filename: str) -> str:
-    """Extrae el numero de factura del nombre del archivo."""
-    import re
     name = Path(filename).stem
     m = re.search(r'fve[_\-]?(\d{5,15})', name, re.IGNORECASE)
     if m:
@@ -714,6 +627,7 @@ def _extraer_id_desde_filename(filename: str) -> str:
         return m.group(1).upper()
     nums = re.findall(r'(\d{6,15})', name)
     return nums[-1] if nums else ""
+
 
 def _parsear_lineas(lineas: list[str], filename: str = "") -> tuple[list[dict], str, str]:
     formato = _detectar_formato(lineas)
@@ -728,7 +642,6 @@ def _parsear_lineas(lineas: list[str], filename: str = "") -> tuple[list[dict], 
     else:
         productos = _parsear_generico(lineas)
 
-    # Fallback: si extrajimos poco, intentar otro formato
     if len(productos) < 2 and formato not in ("JABES", "DISTRIMAYOR"):
         alt = _parsear_formato_b(lineas) if formato == "A" else _parsear_formato_a(lineas)
         if len(alt) > len(productos):
@@ -755,17 +668,14 @@ async def procesar_factura(
     prog(5, "Detectando tipo de archivo...")
     ext = Path(ruta).suffix.lower()
     productos_base = []
-
     f_id, f_prov = "", ""
+
     if ext == ".pdf" and _pdf_tiene_texto(ruta):
-        # PDF digital → parser rápido por regex
         prog(20, "PDF digital — extrayendo texto...")
         lineas = _extraer_texto_pdf_digital(ruta)
         prog(50, f"{len(lineas)} líneas — buscando productos...")
         productos_base, f_id, f_prov = _parsear_lineas(lineas, ruta)
 
-        # Fallback: si el parser no encontró productos (tablas PDF complejas),
-        # usar IA visual que siempre lee correctamente
         if not productos_base:
             prog(55, "Parser no encontró productos — reintentando con IA visual...")
             try:
@@ -778,7 +688,6 @@ async def procesar_factura(
             except Exception as e_ia:
                 prog(65, f"IA fallback falló: {e_ia}")
     else:
-        # PDF escaneado o imagen → Claude Vision
         prog(15, "Enviando a IA para lectura inteligente...")
         try:
             productos_base, f_id, f_prov = _extraer_productos_con_ia(ruta)
@@ -799,24 +708,19 @@ async def procesar_factura(
         try:
             rs = p.get("registro_sanitario_factura", "")
             nombre = p.get("nombre_producto", "")
-            # Preferir RS para la búsqueda. Pasar nombre_producto siempre para:
-            #  a) detectar cosméticos/suplementos (NSOC, SHAMPOO, etc.) y no buscar
-            #  b) validar relevancia del resultado (evitar falsos positivos)
             termino_busqueda = rs if rs else nombre
-            resultado = await buscar_invima(termino_busqueda, nombre_producto=nombre)
+            resultado = await buscar_invima(termino_busqueda)
             datos_invima = resultado or {}
         except Exception:
             pass
 
         productos_finales.append({
-            # Datos de factura
             "codigo_producto":    p.get("codigo_producto", ""),
             "nombre_producto":    p.get("nombre_producto", ""),
             "lote":               p.get("lote", ""),
             "vencimiento":        p.get("vencimiento", ""),
             "cantidad":           int(p.get("cantidad", 1)),
             "num_muestras":       str(p.get("cantidad", "1")),
-            # Datos INVIMA (nombres exactos del schema ProductoRecepcion)
             "registro_sanitario": datos_invima.get("registro_sanitario", p.get("registro_sanitario_factura", "")),
             "estado_invima":      datos_invima.get("estado", ""),
             "laboratorio":        datos_invima.get("laboratorio", ""),
@@ -824,7 +728,6 @@ async def procesar_factura(
             "forma_farmaceutica": datos_invima.get("forma_farmaceutica", ""),
             "concentracion":      datos_invima.get("concentracion", ""),
             "expediente":         datos_invima.get("expediente", ""),
-            # Evaluacion tecnica
             "temperatura":        "30°C",
             "defectos":           "Ninguno",
             "cumple":             "Acepta",
