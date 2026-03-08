@@ -799,9 +799,11 @@ async def procesar_factura(
         try:
             rs = p.get("registro_sanitario_factura", "")
             nombre = p.get("nombre_producto", "")
-            # buscar_invima recibe un solo termino: preferir RS, sino nombre
+            # Preferir RS para la búsqueda. Pasar nombre_producto siempre para:
+            #  a) detectar cosméticos/suplementos (NSOC, SHAMPOO, etc.) y no buscar
+            #  b) validar relevancia del resultado (evitar falsos positivos)
             termino_busqueda = rs if rs else nombre
-            resultado = await buscar_invima(termino_busqueda)
+            resultado = await buscar_invima(termino_busqueda, nombre_producto=nombre)
             datos_invima = resultado or {}
         except Exception:
             pass

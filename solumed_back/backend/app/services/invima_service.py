@@ -48,6 +48,66 @@ def _normalizar_termino(termino: str) -> str:
     return t
 
 
+# Prefijos de registros sanitarios NO farmacéuticos (cosméticos, suplementos, fitoterapia)
+_RE_RS_NO_FARMA = re.compile(
+    r'^(NSOC|NSOCB|NCOS|NSON|ACON|SSD|RSAA|PREM|CASD|CASO)',
+    re.IGNORECASE
+)
+
+# Palabras que indican producto cosmético/suplemento/higiene → no buscar en INVIMA
+_RE_PRODUCTO_NO_FARMA = re.compile(
+    r'\b(SHAMPOO|CHAMPU|JABON|CREMA\s+FACIAL|LOCION|DESMAQUILLANTE'
+    r'|COLAGENO|COLESTROL|SUPLEMENTO|OMEGA\s*3|OMEGA\s*6|RABANO'
+    r'|VITAMINA\s*C\s+ZINC|KEOPS\s+VITAMINA|TOTALMAX|MULTIVITAMIN'
+    r'|BOTANICA|NATURAL|HERBAL|FITOTERAPIA|POMADA\s+CHUCHUGUAZA'
+    r'|CEBOLLA|AJO|JENGIBRE|MORINGA|SPIRULINA|ALOE|BIOTIN'
+    r'|PROTEINA|PROBIOTICO|COLLAGEN|GEL\s+FACIAL|SERUM'
+    r'|HIDRATANTE|ANTIARRUGAS|BRONCEADOR|PROTECTOR\s+SOLAR)\b',
+    re.IGNORECASE
+)
+
+
+def _es_no_farmaceutico(termino: str, rs: str = "") -> bool:
+    """Detecta si un producto NO es farmacéutico (cosmético, suplemento, etc.)."""
+    # Verificar prefijo del registro sanitario
+    rs_limpio = rs.upper().replace("INVIMA ", "").strip()
+    if rs_limpio and _RE_RS_NO_FARMA.match(rs_limpio):
+        return True
+    # Verificar palabras del nombre del producto
+    if _RE_PRODUCTO_NO_FARMA.search(termino):
+        return True
+    return False
+
+
+def _resultado_relevante(termino_buscado: str, resultado: dict) -> bool:
+    """
+    Verifica que el resultado INVIMA sea relevante para el término buscado.
+    Compara palabras del nombre buscado con el nombre del resultado INVIMA.
+    Si la similitud es muy baja, el resultado es un falso positivo.
+    """
+    nombre_resultado = _normalizar_termino(
+        resultado.get("nombre_producto", "")
+    ).upper()
+    termino_norm = _normalizar_termino(termino_buscado).upper()
+
+    # Extraer palabras significativas (>= 4 letras)
+    def palabras_sig(texto: str) -> set:
+        return {w for w in re.findall(r'[A-Z]{4,}', texto)}
+
+    palabras_buscadas = palabras_sig(termino_norm)
+    palabras_resultado = palabras_sig(nombre_resultado)
+
+    if not palabras_buscadas:
+        return True  # sin información suficiente, no filtrar
+
+    # Si el registro sanitario del resultado ya fue buscado por RS, siempre es válido
+    # (la búsqueda por RS es precisa, el problema es la búsqueda por nombre)
+    interseccion = palabras_buscadas & palabras_resultado
+    similitud = len(interseccion) / len(palabras_buscadas)
+
+    return similitud >= 0.15  # al menos 15% de palabras en común
+
+
 def _extraer_palabras_clave(termino: str) -> list[str]:
     """
     Extrae palabras útiles de un nombre de producto como viene en facturas.
@@ -243,19 +303,24 @@ async def buscar_dispositivo(termino: str, limite: int = 20) -> list[dict]:
         raise RuntimeError(f"Error buscando dispositivos: {e}")
 
 
-async def buscar_invima(termino: str) -> Optional[dict]:
+async def buscar_invima(termino: str, nombre_producto: str = "") -> Optional[dict]:
     """
     Búsqueda inteligente para el OCR.
-    1. Si parece RS → buscar_por_registro
-    2. $q full-text
-    3. LIKE con primera palabra del nombre
-    4. Dispositivos
-    5. Número puro → fragmento RS
+    - nombre_producto: nombre original del producto (para validar relevancia del resultado)
+    1. Si el producto es cosmético/suplemento (NSOC, SHAMPOO, etc.) → None sin buscar
+    2. Si parece RS → buscar_por_registro
+    3. $q full-text
+    4. LIKE con primera palabra del nombre
+    5. Validación de relevancia del resultado
     """
     if not termino or len(termino.strip()) < 2:
         return None
 
     t = termino.strip()
+    # 0. Detectar productos no farmacéuticos → no buscar en INVIMA
+    nombre_ref = nombre_producto or t
+    if _es_no_farmaceutico(nombre_ref, rs=t if "INVIMA" in t.upper() or bool(re.match(r'^[A-Z]{2,5}\d', t)) else ""):
+        return None
 
     parece_rs = (
         "INVIMA" in t.upper() or
@@ -266,17 +331,22 @@ async def buscar_invima(termino: str) -> Optional[dict]:
     if parece_rs:
         resultado = await buscar_por_registro(t)
         if resultado:
+            # Para búsqueda por RS, si hay nombre de producto, validar relevancia
+            if nombre_producto and not _resultado_relevante(nombre_producto, resultado):
+                return None
             return resultado
 
     # Full-text
     try:
         resultados = await buscar_multiples(t, limite=1)
         if resultados:
-            return resultados[0]
+            r = resultados[0]
+            if _resultado_relevante(nombre_ref, r):
+                return r
     except Exception:
         pass
 
-    # LIKE con palabras clave extraídas del nombre (quita X, mg, formas farm.)
+    # LIKE con palabras clave extraías del nombre (quita X, mg, formas farm.)
     palabras_clave = _extraer_palabras_clave(t)
 
     for palabra in palabras_clave[:3]:  # máx 3 intentos
@@ -294,7 +364,9 @@ async def buscar_invima(termino: str) -> Optional[dict]:
                 r.raise_for_status()
                 data = r.json()
                 if data:
-                    return _normalizar_medicamento(data[0])
+                    resultado = _normalizar_medicamento(data[0])
+                    if _resultado_relevante(nombre_ref, resultado):
+                        return resultado
         except Exception:
             continue
 
@@ -302,14 +374,16 @@ async def buscar_invima(termino: str) -> Optional[dict]:
     try:
         dispositivos = await buscar_dispositivo(t, limite=1)
         if dispositivos:
-            return dispositivos[0]
+            d = dispositivos[0]
+            if _resultado_relevante(nombre_ref, d):
+                return d
     except Exception:
         pass
 
     # Número puro → fragmento RS
     if re.match(r'^\d{4,}$', t.replace("-", "").replace(" ", "")):
         resultado = await buscar_por_registro(t)
-        if resultado:
+        if resultado and _resultado_relevante(nombre_ref, resultado):
             return resultado
 
     return None
