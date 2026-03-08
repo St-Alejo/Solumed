@@ -1,42 +1,92 @@
 """
 app/core/database.py
 ====================
-Base de datos PostgreSQL/Supabase — producción Railway.
+Base de datos multi-driver: SQLite (desarrollo) o PostgreSQL/Supabase (producción).
+La misma interfaz pública funciona con ambos — sin cambios en los routers.
 
 TABLAS:
-  drogerias             → tenants (clientes)
-  licencias             → planes de pago por droguería
-  usuarios              → cuentas con roles: superadmin | distributor_admin | admin | regente
-  historial             → recepciones técnicas, aisladas por drogeria_id
-  condiciones_ambient.  → temperatura/humedad diaria
-  sesiones              → control de sesiones activas por dispositivo (JTI)
+  drogerias  → tenants (clientes)
+  licencias  → planes de pago por droguería
+  usuarios   → cuentas con roles: superadmin | admin | regente
+  historial  → recepciones técnicas, aisladas por drogeria_id
 """
 
+import contextlib
 from datetime import date, datetime
-from typing import Optional
-
-import psycopg2
-import psycopg2.extras
+from typing import Optional, Any
 
 from app.core.config import settings
 
 
 # ══════════════════════════════════════════════════════════════
-#  CONEXIÓN
+#  CONEXIÓN — SQLite o PostgreSQL según configuración
 # ══════════════════════════════════════════════════════════════
 
-def get_conn():
+def _get_conn_sqlite():
+    import sqlite3
+    con = sqlite3.connect(str(settings.DB_PATH), check_same_thread=False)
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA foreign_keys=ON")
+    return con
+
+
+def _get_conn_postgres():
+    import psycopg2
+    import psycopg2.extras
     con = psycopg2.connect(settings.DATABASE_URL)
     con.autocommit = False
     return con
 
 
-def _row_to_dict(row, cursor) -> dict:
-    """Convierte una fila de psycopg2 a dict usando cursor.description."""
+def get_conn():
+    if settings.usar_postgres:
+        return _get_conn_postgres()
+    return _get_conn_sqlite()
+
+
+def _row_to_dict(row, cursor=None) -> dict:
+    """Convierte una fila de SQLite o psycopg2 a dict."""
     if row is None:
         return None
-    cols = [d[0] for d in cursor.description]
-    return dict(zip(cols, row))
+    if hasattr(row, "keys"):                         # sqlite3.Row
+        return dict(row)
+    if cursor and hasattr(cursor, "description"):    # psycopg2
+        cols = [d[0] for d in cursor.description]
+        return dict(zip(cols, row))
+    return dict(row)
+
+
+def _placeholder() -> str:
+    """Retorna el placeholder de parámetro según el driver."""
+    return "%s" if settings.usar_postgres else "?"
+
+
+def _adapt_query(sql: str) -> str:
+    """Convierte ? → %s para psycopg2."""
+    if settings.usar_postgres:
+        return sql.replace("?", "%s")
+    return sql
+
+
+def _adapt_now_date() -> str:
+    """Función de fecha actual según el driver."""
+    if settings.usar_postgres:
+        return "CURRENT_DATE"
+    return "date('now')"
+
+
+def _adapt_now_datetime() -> str:
+    if settings.usar_postgres:
+        return "NOW()"
+    return "datetime('now')"
+
+
+def _adapt_interval(days: int, operator: str = "+") -> str:
+    """Intervalo de días para consultas."""
+    if settings.usar_postgres:
+        return f"CURRENT_DATE {operator} INTERVAL '{days} days'"
+    return f"date('now', '{operator}{days} days')"
 
 
 # ══════════════════════════════════════════════════════════════
@@ -44,80 +94,94 @@ def _row_to_dict(row, cursor) -> dict:
 # ══════════════════════════════════════════════════════════════
 
 def inicializar():
-    """Crea tablas si no existen y el superadmin por defecto."""
-    con = get_conn()
-    cur = con.cursor()
+    """
+    Crea tablas si no existen y el superadmin por defecto.
+    Compatible con SQLite y PostgreSQL.
+    """
+    pg = settings.usar_postgres
+
+    if pg:
+        import psycopg2
+        con = _get_conn_postgres()
+        cur = con.cursor()
+        serial    = "SERIAL"
+        text_pk   = "SERIAL PRIMARY KEY"
+        bool_type = "BOOLEAN DEFAULT TRUE"
+        int_def   = "INTEGER DEFAULT 0"
+        ts_now    = "TIMESTAMP DEFAULT NOW()"
+        date_now  = "DATE DEFAULT CURRENT_DATE"
+    else:
+        import sqlite3
+        con = _get_conn_sqlite()
+        cur = con.cursor()
+        serial    = "INTEGER"
+        text_pk   = "INTEGER PRIMARY KEY AUTOINCREMENT"
+        bool_type = "INTEGER DEFAULT 1"
+        int_def   = "INTEGER DEFAULT 0"
+        ts_now    = f"TEXT DEFAULT (datetime('now'))"
+        date_now  = f"TEXT DEFAULT (date('now'))"
+
     try:
         # ── drogerias ─────────────────────────────────────────
-        cur.execute("""
+        cur.execute(f"""
             CREATE TABLE IF NOT EXISTS drogerias (
-                id              SERIAL PRIMARY KEY,
-                nombre          TEXT NOT NULL,
-                nit             TEXT UNIQUE,
-                ciudad          TEXT DEFAULT '',
-                direccion       TEXT DEFAULT '',
-                telefono        TEXT DEFAULT '',
-                email           TEXT DEFAULT '',
-                logo_url        TEXT DEFAULT '',
-                activa          BOOLEAN DEFAULT TRUE,
-                creada_en       DATE DEFAULT CURRENT_DATE,
-                creada_por_id   INTEGER,
-                creada_por_rol  TEXT DEFAULT ''
+                id        {text_pk},
+                nombre    TEXT NOT NULL,
+                nit       TEXT UNIQUE,
+                ciudad    TEXT DEFAULT '',
+                direccion TEXT DEFAULT '',
+                telefono  TEXT DEFAULT '',
+                email     TEXT DEFAULT '',
+                logo_url  TEXT DEFAULT '',
+                activa    {bool_type},
+                creada_en {date_now}
             )
         """)
-
-        # Migración segura: añadir columnas si no existen
-        for col_sql in [
-            "ALTER TABLE drogerias ADD COLUMN IF NOT EXISTS creada_por_id  INTEGER",
-            "ALTER TABLE drogerias ADD COLUMN IF NOT EXISTS creada_por_rol TEXT DEFAULT ''",
-        ]:
-            cur.execute(col_sql)
 
         # ── licencias ─────────────────────────────────────────
-        cur.execute("""
+        cur.execute(f"""
             CREATE TABLE IF NOT EXISTS licencias (
-                id              SERIAL PRIMARY KEY,
-                drogeria_id     INTEGER NOT NULL REFERENCES drogerias(id),
-                plan            TEXT DEFAULT 'mensual',
-                estado          TEXT DEFAULT 'activa',
-                inicio          TEXT NOT NULL,
-                vencimiento     TEXT NOT NULL,
-                max_usuarios    INTEGER DEFAULT 5,
-                precio_cop      INTEGER DEFAULT 0,
-                notas           TEXT DEFAULT '',
-                creada_por_id   INTEGER
+                id           {text_pk},
+                drogeria_id  INTEGER NOT NULL REFERENCES drogerias(id),
+                plan         TEXT DEFAULT 'mensual',
+                estado       TEXT DEFAULT 'activa',
+                inicio       TEXT NOT NULL,
+                vencimiento  TEXT NOT NULL,
+                max_usuarios INTEGER DEFAULT 5,
+                precio_cop   {int_def},
+                notas        TEXT DEFAULT ''
             )
         """)
 
-        cur.execute(
-            "ALTER TABLE licencias ADD COLUMN IF NOT EXISTS creada_por_id INTEGER"
-        )
-
         # ── usuarios ──────────────────────────────────────────
-        cur.execute("""
+        cur.execute(f"""
             CREATE TABLE IF NOT EXISTS usuarios (
-                id            SERIAL PRIMARY KEY,
+                id            {text_pk},
                 drogeria_id   INTEGER REFERENCES drogerias(id),
                 email         TEXT UNIQUE NOT NULL,
                 nombre        TEXT NOT NULL,
                 password_hash TEXT NOT NULL,
                 rol           TEXT DEFAULT 'regente',
-                activo        BOOLEAN DEFAULT TRUE,
-                creado_en     TIMESTAMP DEFAULT NOW(),
+                activo        {bool_type},
+                creado_en     {ts_now},
                 ultimo_login  TEXT
             )
         """)
 
+        # Índices
         for sql in [
             "CREATE INDEX IF NOT EXISTS idx_usr_email ON usuarios(email)",
             "CREATE INDEX IF NOT EXISTS idx_usr_drog  ON usuarios(drogeria_id)",
         ]:
-            cur.execute(sql)
+            try:
+                cur.execute(sql)
+            except Exception:
+                pass
 
         # ── historial ─────────────────────────────────────────
-        cur.execute("""
+        cur.execute(f"""
             CREATE TABLE IF NOT EXISTS historial (
-                id                 SERIAL PRIMARY KEY,
+                id                 {text_pk},
                 drogeria_id        INTEGER NOT NULL REFERENCES drogerias(id),
                 usuario_id         INTEGER REFERENCES usuarios(id),
                 fecha_proceso      TEXT NOT NULL,
@@ -150,68 +214,51 @@ def inicializar():
             "CREATE INDEX IF NOT EXISTS idx_hist_fecha ON historial(fecha_proceso)",
             "CREATE INDEX IF NOT EXISTS idx_hist_fac   ON historial(factura_id)",
         ]:
-            cur.execute(sql)
+            try:
+                cur.execute(sql)
+            except Exception:
+                pass
 
-        # ── condiciones ambientales ───────────────────────────
-        cur.execute("""
+        # ── condiciones_ambientales ────────────────────────────
+        cur.execute(f"""
             CREATE TABLE IF NOT EXISTS condiciones_ambientales (
-                id              SERIAL PRIMARY KEY,
-                drogeria_id     INTEGER NOT NULL REFERENCES drogerias(id),
-                usuario_id      INTEGER REFERENCES usuarios(id),
-                fecha           TEXT NOT NULL,
-                temperatura_am  REAL,
-                temperatura_pm  REAL,
-                humedad_am      REAL,
-                humedad_pm      REAL,
-                firma_am        TEXT,
-                firma_pm        TEXT,
+                id             {text_pk},
+                drogeria_id    INTEGER NOT NULL REFERENCES drogerias(id),
+                usuario_id     INTEGER REFERENCES usuarios(id),
+                fecha          TEXT NOT NULL,
+                temperatura_am REAL,
+                temperatura_pm REAL,
+                humedad_am     REAL,
+                humedad_pm     REAL,
+                firma_am       TEXT DEFAULT '',
+                firma_pm       TEXT DEFAULT '',
                 UNIQUE(drogeria_id, fecha)
             )
         """)
-
-        for sql in [
-            "CREATE INDEX IF NOT EXISTS idx_conda_fecha ON condiciones_ambientales(fecha)",
-            "CREATE INDEX IF NOT EXISTS idx_conda_drog  ON condiciones_ambientales(drogeria_id)",
-        ]:
-            cur.execute(sql)
-
-        # ── sesiones ──────────────────────────────────────────
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS sesiones (
-                id          SERIAL PRIMARY KEY,
-                usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-                token_jti   TEXT NOT NULL UNIQUE,
-                device_info TEXT DEFAULT '',
-                creada_en   TIMESTAMP DEFAULT NOW(),
-                expira_en   TEXT NOT NULL,
-                activa      BOOLEAN DEFAULT TRUE
-            )
-        """)
-
-        for sql in [
-            "CREATE INDEX IF NOT EXISTS idx_ses_usuario ON sesiones(usuario_id)",
-            "CREATE INDEX IF NOT EXISTS idx_ses_jti     ON sesiones(token_jti)",
-        ]:
-            cur.execute(sql)
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_cond_drog_fecha ON condiciones_ambientales(drogeria_id, fecha)")
+        except Exception:
+            pass
 
         con.commit()
 
         # ── Superadmin por defecto ─────────────────────────────
         cur.execute("SELECT id FROM usuarios WHERE rol='superadmin' LIMIT 1")
-        if not cur.fetchone():
+        row = cur.fetchone()
+        if not row:
             pw = _hash("Admin2026!")
-            cur.execute("""
+            cur.execute(_adapt_query("""
                 INSERT INTO usuarios (email, nombre, password_hash, rol, drogeria_id)
-                VALUES (%s, %s, %s, 'superadmin', NULL)
-            """, ("admin@solumed.co", "Administrador SoluMed", pw))
+                VALUES (?,?,?,'superadmin', NULL)
+            """), ("admin@solumed.co", "Administrador SoluMed", pw))
             con.commit()
-            print("[OK] Superadmin creado -> admin@solumed.co | Admin2026!")
+            print("✅ Superadmin creado → admin@solumed.co | Admin2026!")
 
     finally:
         cur.close()
         con.close()
 
-    print("[OK] BD lista (PostgreSQL/Supabase)")
+    print(f"✅ BD lista ({'PostgreSQL/Supabase' if pg else 'SQLite'})")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -235,60 +282,108 @@ def verify_password(plain: str, hashed: str) -> bool:
 #  HELPERS DE CONSULTA
 # ══════════════════════════════════════════════════════════════
 
+def _is_conn_error(e: Exception) -> bool:
+    """Detecta errores de conexión SSL/TCP que ameritan reintento."""
+    msg = str(e).lower()
+    return any(k in msg for k in (
+        "ssl connection has been closed",
+        "connection closed",
+        "connection reset",
+        "broken pipe",
+        "connection refused",
+        "could not connect",
+        "operationalerror",
+        "server closed the connection",
+    ))
+
+
 def _fetch_one(sql: str, params: tuple = ()) -> Optional[dict]:
-    con = get_conn()
-    try:
-        cur = con.cursor()
-        cur.execute(sql.replace("?", "%s"), params)
-        row = cur.fetchone()
-        return _row_to_dict(row, cur) if row else None
-    finally:
-        cur.close()
-        con.close()
+    for intento in range(3):
+        try:
+            con = get_conn()
+            try:
+                cur = con.cursor()
+                cur.execute(_adapt_query(sql), params)
+                row = cur.fetchone()
+                return _row_to_dict(row, cur) if row else None
+            finally:
+                cur.close(); con.close()
+        except Exception as e:
+            if intento < 2 and _is_conn_error(e):
+                import time; time.sleep(0.3 * (intento + 1))
+                continue
+            raise
 
 
 def _fetch_all(sql: str, params: tuple = ()) -> list[dict]:
-    con = get_conn()
-    try:
-        cur = con.cursor()
-        cur.execute(sql.replace("?", "%s"), params)
-        rows = cur.fetchall()
-        return [_row_to_dict(r, cur) for r in rows]
-    finally:
-        cur.close()
-        con.close()
+    for intento in range(3):
+        try:
+            con = get_conn()
+            try:
+                cur = con.cursor()
+                cur.execute(_adapt_query(sql), params)
+                rows = cur.fetchall()
+                return [_row_to_dict(r, cur) for r in rows]
+            finally:
+                cur.close(); con.close()
+        except Exception as e:
+            if intento < 2 and _is_conn_error(e):
+                import time; time.sleep(0.3 * (intento + 1))
+                continue
+            raise
 
 
-def _execute(sql: str, params: tuple = ()) -> Optional[int]:
-    """Ejecuta INSERT/UPDATE/DELETE. Los INSERT retornan el id generado."""
-    con = get_conn()
-    try:
-        cur = con.cursor()
-        sql_pg = sql.replace("?", "%s")
-        if sql_pg.strip().upper().startswith("INSERT"):
-            sql_pg += " RETURNING id"
-            cur.execute(sql_pg, params)
-            row = cur.fetchone()
-            lid = row[0] if row else None
-        else:
-            cur.execute(sql_pg, params)
-            lid = None
-        con.commit()
-        return lid
-    finally:
-        cur.close()
-        con.close()
+def _execute(sql: str, params: tuple = ()) -> int:
+    """Ejecuta INSERT/UPDATE/DELETE y retorna lastrowid."""
+    for intento in range(3):
+        try:
+            con = get_conn()
+            try:
+                cur = con.cursor()
+                if settings.usar_postgres:
+                    sql_adapted = _adapt_query(sql)
+                    if sql_adapted.strip().upper().startswith("INSERT"):
+                        sql_adapted += " RETURNING id"
+                        cur.execute(sql_adapted, params)
+                        row = cur.fetchone()
+                        lid = row[0] if row else None
+                    else:
+                        cur.execute(sql_adapted, params)
+                        lid = None
+                else:
+                    cur.execute(_adapt_query(sql), params)
+                    lid = cur.lastrowid
+                con.commit()
+                return lid
+            finally:
+                cur.close(); con.close()
+        except Exception as e:
+            if intento < 2 and _is_conn_error(e):
+                import time; time.sleep(0.3 * (intento + 1))
+                continue
+            raise
 
 
 def _executemany(sql: str, params_list: list[tuple]):
-    con = get_conn()
-    try:
-        cur = con.cursor()
-        psycopg2.extras.execute_batch(cur, sql.replace("?", "%s"), params_list)
-        con.commit()
-    finally:
-        cur.close()
-        con.close()
+    for intento in range(3):
+        try:
+            con = get_conn()
+            try:
+                cur = con.cursor()
+                if settings.usar_postgres:
+                    import psycopg2.extras
+                    psycopg2.extras.execute_batch(cur, _adapt_query(sql), params_list)
+                else:
+                    cur.executemany(_adapt_query(sql), params_list)
+                con.commit()
+            finally:
+                cur.close(); con.close()
+            return
+        except Exception as e:
+            if intento < 2 and _is_conn_error(e):
+                import time; time.sleep(0.3 * (intento + 1))
+                continue
+            raise
 
 
 # ══════════════════════════════════════════════════════════════
@@ -313,43 +408,42 @@ def get_usuario_by_email(email: str) -> Optional[dict]:
                 WHERE drogeria_id = u.drogeria_id AND estado = 'activa'
                 ORDER BY id DESC LIMIT 1
             )
-        WHERE u.email = %s
+        WHERE u.email = ?
     """, (email.lower().strip(),))
 
 
 def update_ultimo_login(usuario_id: int):
     _execute(
-        "UPDATE usuarios SET ultimo_login=%s WHERE id=%s",
+        "UPDATE usuarios SET ultimo_login=? WHERE id=?",
         (datetime.now().isoformat(), usuario_id)
     )
 
 
-def crear_usuario(drogeria_id: Optional[int], email: str, nombre: str,
+def crear_usuario(drogeria_id: int, email: str, nombre: str,
                   password: str, rol: str = "regente") -> int:
     return _execute("""
         INSERT INTO usuarios (drogeria_id, email, nombre, password_hash, rol)
-        VALUES (%s, %s, %s, %s, %s)
+        VALUES (?,?,?,?,?)
     """, (drogeria_id, email.lower().strip(), nombre, _hash(password), rol))
 
 
 def get_usuario(uid: int) -> Optional[dict]:
-    return _fetch_one("SELECT * FROM usuarios WHERE id=%s", (uid,))
+    return _fetch_one("SELECT * FROM usuarios WHERE id=?", (uid,))
 
 
 def listar_usuarios_drogeria(drogeria_id: int) -> list[dict]:
     return _fetch_all(
-        "SELECT id,email,nombre,rol,activo,creado_en,ultimo_login FROM usuarios "
-        "WHERE drogeria_id=%s ORDER BY nombre",
+        "SELECT id,email,nombre,rol,activo,creado_en,ultimo_login FROM usuarios WHERE drogeria_id=? ORDER BY nombre",
         (drogeria_id,)
     )
 
 
 def eliminar_usuario(uid: int):
-    _execute("DELETE FROM usuarios WHERE id=%s", (uid,))
+    _execute("DELETE FROM usuarios WHERE id=?", (uid,))
 
 
 def cambiar_password(uid: int, nueva: str):
-    _execute("UPDATE usuarios SET password_hash=%s WHERE id=%s", (_hash(nueva), uid))
+    _execute("UPDATE usuarios SET password_hash=? WHERE id=?", (_hash(nueva), uid))
 
 
 # ══════════════════════════════════════════════════════════════
@@ -357,28 +451,24 @@ def cambiar_password(uid: int, nueva: str):
 # ══════════════════════════════════════════════════════════════
 
 def crear_drogeria(nombre: str, nit: str = "", ciudad: str = "",
-                   direccion: str = "", telefono: str = "", email: str = "",
-                   creada_por_id: Optional[int] = None,
-                   creada_por_rol: str = "") -> int:
+                   direccion: str = "", telefono: str = "", email: str = "") -> int:
     return _execute("""
-        INSERT INTO drogerias (nombre, nit, ciudad, direccion, telefono, email, creada_por_id, creada_por_rol)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    """, (nombre, nit, ciudad, direccion, telefono, email, creada_por_id, creada_por_rol))
+        INSERT INTO drogerias (nombre, nit, ciudad, direccion, telefono, email)
+        VALUES (?,?,?,?,?,?)
+    """, (nombre, nit, ciudad, direccion, telefono, email))
 
 
 def get_drogeria(did: int) -> Optional[dict]:
-    return _fetch_one("SELECT * FROM drogerias WHERE id=%s", (did,))
+    return _fetch_one("SELECT * FROM drogerias WHERE id=?", (did,))
 
 
 def listar_drogerias() -> list[dict]:
     return _fetch_all("""
         SELECT d.*,
-               l.plan          AS lic_plan,
-               l.estado        AS lic_estado,
-               l.vencimiento   AS lic_vencimiento,
-               l.max_usuarios  AS lic_max_usuarios,
-               creador.nombre  AS creada_por_nombre,
-               creador.email   AS creada_por_email,
+               l.plan        AS lic_plan,
+               l.estado      AS lic_estado,
+               l.vencimiento AS lic_vencimiento,
+               l.max_usuarios AS lic_max_usuarios,
                COUNT(DISTINCT u.id) AS total_usuarios,
                COUNT(DISTINCT h.id) AS total_recepciones
         FROM drogerias d
@@ -390,56 +480,23 @@ def listar_drogerias() -> list[dict]:
                 WHERE drogeria_id = d.id AND estado = 'activa'
                 ORDER BY id DESC LIMIT 1
             )
-        LEFT JOIN usuarios creador ON creador.id = d.creada_por_id
-        LEFT JOIN usuarios u ON u.drogeria_id = d.id AND u.activo IS TRUE
+        LEFT JOIN usuarios u ON u.drogeria_id = d.id AND u.activo=TRUE
         LEFT JOIN historial h ON h.drogeria_id = d.id
         GROUP BY d.id, d.nombre, d.nit, d.ciudad, d.direccion, d.telefono,
                  d.email, d.logo_url, d.activa, d.creada_en,
-                 d.creada_por_id, d.creada_por_rol,
-                 l.plan, l.estado, l.vencimiento, l.max_usuarios,
-                 creador.nombre, creador.email
+                 l.plan, l.estado, l.vencimiento, l.max_usuarios
         ORDER BY d.nombre
     """)
 
 
-def listar_drogerias_por_gerente(distributor_id: int) -> list[dict]:
-    """Droguerías creadas por un gerente distribuidor específico."""
-    return _fetch_all("""
-        SELECT d.*,
-               l.plan          AS lic_plan,
-               l.estado        AS lic_estado,
-               l.vencimiento   AS lic_vencimiento,
-               l.max_usuarios  AS lic_max_usuarios,
-               COUNT(DISTINCT u.id) AS total_usuarios,
-               COUNT(DISTINCT h.id) AS total_recepciones
-        FROM drogerias d
-        LEFT JOIN licencias l
-            ON l.drogeria_id = d.id
-            AND l.estado = 'activa'
-            AND l.id = (
-                SELECT id FROM licencias
-                WHERE drogeria_id = d.id AND estado = 'activa'
-                ORDER BY id DESC LIMIT 1
-            )
-        LEFT JOIN usuarios u ON u.drogeria_id = d.id AND u.activo IS TRUE
-        LEFT JOIN historial h ON h.drogeria_id = d.id
-        WHERE d.creada_por_id = %s
-        GROUP BY d.id, d.nombre, d.nit, d.ciudad, d.direccion, d.telefono,
-                 d.email, d.logo_url, d.activa, d.creada_en,
-                 d.creada_por_id, d.creada_por_rol,
-                 l.plan, l.estado, l.vencimiento, l.max_usuarios
-        ORDER BY d.nombre
-    """, (distributor_id,))
-
-
 def actualizar_drogeria(did: int, **campos):
-    sets = ", ".join(f"{k}=%s" for k in campos)
-    _execute(f"UPDATE drogerias SET {sets} WHERE id=%s",
+    sets = ", ".join(f"{k}=?" for k in campos)
+    _execute(f"UPDATE drogerias SET {sets} WHERE id=?",
              tuple(campos.values()) + (did,))
 
 
 def desactivar_drogeria(did: int):
-    _execute("UPDATE drogerias SET activa=FALSE WHERE id=%s", (did,))
+    _execute("UPDATE drogerias SET activa=FALSE WHERE id=?", (did,))
 
 
 # ══════════════════════════════════════════════════════════════
@@ -448,19 +505,16 @@ def desactivar_drogeria(did: int):
 
 def crear_licencia(drogeria_id: int, plan: str, inicio: str,
                    vencimiento: str, max_usuarios: int = 5,
-                   precio_cop: int = 0, notas: str = "",
-                   creada_por_id: Optional[int] = None) -> int:
+                   precio_cop: int = 0, notas: str = "") -> int:
     return _execute("""
-        INSERT INTO licencias (drogeria_id, plan, estado, inicio, vencimiento,
-                               max_usuarios, precio_cop, notas, creada_por_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """, (drogeria_id, plan, "activa", inicio, vencimiento,
-          max_usuarios, precio_cop, notas, creada_por_id))
+        INSERT INTO licencias (drogeria_id,plan,estado,inicio,vencimiento,max_usuarios,precio_cop,notas)
+        VALUES (?,?,?,?,?,?,?,?)
+    """, (drogeria_id, plan, "activa", inicio, vencimiento, max_usuarios, precio_cop, notas))
 
 
 def get_licencia(drogeria_id: int) -> Optional[dict]:
     return _fetch_one(
-        "SELECT * FROM licencias WHERE drogeria_id=%s AND estado='activa' ORDER BY id DESC LIMIT 1",
+        "SELECT * FROM licencias WHERE drogeria_id=? AND estado='activa' ORDER BY id DESC LIMIT 1",
         (drogeria_id,)
     )
 
@@ -478,7 +532,7 @@ def verificar_licencia_activa(drogeria_id: int) -> bool:
     if not lic:
         return False
     if str(lic["vencimiento"])[:10] < date.today().isoformat():
-        _execute("UPDATE licencias SET estado='vencida' WHERE id=%s", (lic["id"],))
+        _execute("UPDATE licencias SET estado='vencida' WHERE id=?", (lic["id"],))
         return False
     return True
 
@@ -512,7 +566,7 @@ def guardar_recepcion(drogeria_id: int, usuario_id: int,
             presentacion, lote, vencimiento, cantidad, num_muestras, temperatura,
             registro_sanitario, estado_invima, laboratorio, principio_activo,
             expediente, defectos, cumple, observaciones, ruta_pdf
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, filas)
     return len(filas)
 
@@ -520,255 +574,61 @@ def guardar_recepcion(drogeria_id: int, usuario_id: int,
 def obtener_historial(drogeria_id: int, desde: str = None, hasta: str = None,
                       factura_id: str = None, pagina: int = 1,
                       por_pagina: int = 50) -> dict:
-    base   = "FROM historial WHERE drogeria_id=%s"
+    base   = "FROM historial WHERE drogeria_id=?"
     params: list = [drogeria_id]
-    if desde:      base += " AND fecha_proceso::date>=%s";           params.append(desde)
-    if hasta:      base += " AND fecha_proceso::date<=%s";           params.append(hasta)
-    if factura_id: base += " AND factura_id LIKE %s";                params.append(f"%{factura_id}%")
+    if desde:     base += " AND fecha_proceso::date>=?"; params.append(desde)
+    if hasta:     base += " AND fecha_proceso::date<=?"; params.append(hasta)
+    if factura_id: base += " AND factura_id LIKE ?"; params.append(f"%{factura_id}%")
 
     con = get_conn()
     try:
         cur = con.cursor()
-        cur.execute(f"SELECT COUNT(*) {base}", params)
+        cur.execute(_adapt_query(f"SELECT COUNT(*) {base}"), params)
         total = cur.fetchone()[0]
         cur.execute(
-            f"SELECT * {base} ORDER BY fecha_proceso DESC, id DESC LIMIT %s OFFSET %s",
+            _adapt_query(f"SELECT * {base} ORDER BY fecha_proceso DESC, id DESC LIMIT ? OFFSET ?"),
             params + [por_pagina, (pagina - 1) * por_pagina]
         )
         datos = [_row_to_dict(r, cur) for r in cur.fetchall()]
     finally:
-        cur.close()
-        con.close()
+        cur.close(); con.close()
 
     return {
-        "total":        total,
-        "paginas":      max(1, (total + por_pagina - 1) // por_pagina),
+        "total": total,
+        "paginas": max(1, (total + por_pagina - 1) // por_pagina),
         "pagina_actual": pagina,
-        "datos":        datos,
+        "datos": datos,
     }
 
 
 def estadisticas_drogeria(drogeria_id: int) -> dict:
-    from collections import defaultdict
+    d30 = _adapt_interval(30, "-")
     rows = _fetch_all(
-        "SELECT cumple, defectos, fecha_proceso FROM historial "
-        "WHERE drogeria_id=%s AND fecha_proceso::date >= CURRENT_DATE - INTERVAL '30 days'",
+        f"SELECT cumple, defectos, fecha_proceso FROM historial WHERE drogeria_id=? AND fecha_proceso::date >= {d30}",
         (drogeria_id,)
     )
-    total_all = _fetch_one("SELECT COUNT(*) AS n FROM historial WHERE drogeria_id=%s", (drogeria_id,))
-    total     = total_all["n"] if total_all else 0
+    total_all = _fetch_one("SELECT COUNT(*) AS n FROM historial WHERE drogeria_id=?", (drogeria_id,))
+    total = total_all["n"] if total_all else 0
     aceptados = sum(1 for r in rows if r.get("cumple") == "Acepta")
 
     por_defecto: dict = {}
     for r in rows:
-        d = r.get("defectos", "Ninguno")
+        d = r.get("defectos","Ninguno")
         por_defecto[d] = por_defecto.get(d, 0) + 1
 
+    from collections import defaultdict
     por_fecha: dict = defaultdict(int)
     for r in rows:
         por_fecha[r["fecha_proceso"][:10]] += 1
     ultimos_30 = [{"fecha_proceso": k, "n": v} for k, v in sorted(por_fecha.items())]
 
     return {
-        "total":          total,
-        "aceptados":      aceptados,
-        "rechazados":     total - aceptados,
-        "por_defecto":    por_defecto,
+        "total": total,
+        "aceptados": aceptados,
+        "rechazados": total - aceptados,
+        "por_defecto": por_defecto,
         "ultimos_30_dias": ultimos_30,
     }
-
-
-# ══════════════════════════════════════════════════════════════
-#  CONDICIONES AMBIENTALES
-# ══════════════════════════════════════════════════════════════
-
-def guardar_condiciones_dia(drogeria_id: int, usuario_id: int,
-                            fecha: str, temperatura_am: Optional[float] = None,
-                            temperatura_pm: Optional[float] = None,
-                            humedad_am: Optional[float] = None,
-                            humedad_pm: Optional[float] = None,
-                            firma_am: Optional[str] = None,
-                            firma_pm: Optional[str] = None) -> int:
-    """Inserta o actualiza el registro de condiciones para un día."""
-    existe = _fetch_one(
-        "SELECT id FROM condiciones_ambientales WHERE drogeria_id=%s AND fecha=%s",
-        (drogeria_id, fecha)
-    )
-    if existe:
-        return _execute("""
-            UPDATE condiciones_ambientales SET
-                usuario_id     = COALESCE(%s, usuario_id),
-                temperatura_am = COALESCE(%s, temperatura_am),
-                temperatura_pm = COALESCE(%s, temperatura_pm),
-                humedad_am     = COALESCE(%s, humedad_am),
-                humedad_pm     = COALESCE(%s, humedad_pm),
-                firma_am       = COALESCE(%s, firma_am),
-                firma_pm       = COALESCE(%s, firma_pm)
-            WHERE id = %s
-        """, (usuario_id, temperatura_am, temperatura_pm,
-              humedad_am, humedad_pm, firma_am, firma_pm, existe["id"]))
-    else:
-        return _execute("""
-            INSERT INTO condiciones_ambientales (
-                drogeria_id, usuario_id, fecha, temperatura_am, temperatura_pm,
-                humedad_am, humedad_pm, firma_am, firma_pm
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (drogeria_id, usuario_id, fecha, temperatura_am, temperatura_pm,
-              humedad_am, humedad_pm, firma_am, firma_pm))
-
-
-def obtener_condiciones_mes(drogeria_id: int, anio_mes: str) -> list[dict]:
-    """Retorna los registros de un mes específico (YYYY-MM)."""
-    return _fetch_all("""
-        SELECT * FROM condiciones_ambientales
-        WHERE drogeria_id = %s AND fecha LIKE %s
-        ORDER BY fecha ASC
-    """, (drogeria_id, f"{anio_mes}-%"))
-
-
-def verificar_alerta_condiciones(drogeria_id: int) -> bool:
-    """Retorna True si falta el registro del día actual."""
-    hoy = date.today().isoformat()
-    registro = _fetch_one(
-        "SELECT id FROM condiciones_ambientales WHERE drogeria_id=%s AND fecha=%s",
-        (drogeria_id, hoy)
-    )
-    return registro is None
-
-
-# ══════════════════════════════════════════════════════════════
-#  SESIONES (control de dispositivos)
-# ══════════════════════════════════════════════════════════════
-
-LIMITE_SESIONES = {
-    "superadmin":        0,   # ilimitado
-    "distributor_admin": 1,   # 1 dispositivo
-    "admin":             3,   # 3 dispositivos
-    "regente":           3,   # 3 dispositivos
-}
-
-
-def crear_sesion(usuario_id: int, token_jti: str, expira_en: str,
-                 device_info: str = "") -> int:
-    """Registra una nueva sesión activa."""
-    return _execute("""
-        INSERT INTO sesiones (usuario_id, token_jti, expira_en, device_info)
-        VALUES (%s, %s, %s, %s)
-    """, (usuario_id, token_jti, expira_en, device_info))
-
-
-def sesion_valida(token_jti: str) -> bool:
-    """Verifica que el JTI esté en sesiones activas."""
-    row = _fetch_one(
-        "SELECT id FROM sesiones WHERE token_jti=%s AND activa IS TRUE",
-        (token_jti,)
-    )
-    return row is not None
-
-
-def invalidar_sesion(token_jti: str):
-    """Marca una sesión como inactiva (logout o desplazamiento por nuevo login)."""
-    _execute(
-        "UPDATE sesiones SET activa=FALSE WHERE token_jti=%s",
-        (token_jti,)
-    )
-
-
-def cerrar_todas_sesiones(usuario_id: int):
-    """Invalida TODAS las sesiones activas de un usuario (ej. cambio de contraseña)."""
-    _execute(
-        "UPDATE sesiones SET activa=FALSE WHERE usuario_id=%s AND activa IS TRUE",
-        (usuario_id,)
-    )
-
-
-def limpiar_sesiones_exceso(usuario_id: int, rol: str) -> int:
-    """
-    Invalida sesiones activas sobrantes según el límite del rol.
-    Se llama antes de crear una nueva sesión en el login.
-    Retorna el número de sesiones invalidadas.
-    """
-    limite = LIMITE_SESIONES.get(rol, 3)
-    if limite == 0:  # superadmin — sin límite
-        return 0
-
-    activas = _fetch_all(
-        "SELECT id, token_jti FROM sesiones WHERE usuario_id=%s AND activa IS TRUE ORDER BY id ASC",
-        (usuario_id,)
-    )
-    # El nuevo login añadirá 1 más → liberar espacio
-    exceso = len(activas) - (limite - 1)
-    if exceso <= 0:
-        return 0
-
-    for s in activas[:exceso]:   # las más antiguas primero
-        invalidar_sesion(s["token_jti"])
-    return exceso
-
-
-# ══════════════════════════════════════════════════════════════
-#  DISTRIBUIDORES
-# ══════════════════════════════════════════════════════════════
-
-def listar_distribuidores() -> list[dict]:
-    """Lista todos los gerentes distribuidores con sus estadísticas."""
-    return _fetch_all("""
-        SELECT u.id, u.email, u.nombre, u.activo, u.creado_en, u.ultimo_login,
-               COUNT(DISTINCT d.id)                        AS total_drogerias,
-               SUM(CASE WHEN d.activa IS TRUE THEN 1 ELSE 0 END) AS drogerias_activas
-        FROM usuarios u
-        LEFT JOIN drogerias d ON d.creada_por_id = u.id
-        WHERE u.rol = 'distributor_admin'
-        GROUP BY u.id, u.email, u.nombre, u.activo, u.creado_en, u.ultimo_login
-        ORDER BY u.nombre
-    """)
-
-
-def dashboard_gerente(distributor_id: int) -> dict:
-    """Métricas personales para el gerente distribuidor."""
-    total = (_fetch_one(
-        "SELECT COUNT(*) AS n FROM drogerias WHERE creada_por_id=%s",
-        (distributor_id,)
-    ) or {}).get("n", 0)
-
-    activas = (_fetch_one(
-        "SELECT COUNT(*) AS n FROM drogerias WHERE creada_por_id=%s AND activa IS TRUE",
-        (distributor_id,)
-    ) or {}).get("n", 0)
-
-    return {
-        "total_drogerias":     total,
-        "drogerias_activas":   activas,
-        "drogerias_inactivas": total - activas,
-    }
-
-
-def reporte_gerentes() -> list[dict]:
-    """Reporte para superadmin: droguerías agrupadas por gerente."""
-    return _fetch_all("""
-        SELECT
-            u.id                                                     AS gerente_id,
-            u.nombre                                                 AS gerente_nombre,
-            u.email                                                  AS gerente_email,
-            u.activo                                                 AS gerente_activo,
-            COUNT(DISTINCT d.id)                                     AS total_drogerias,
-            SUM(CASE WHEN d.activa IS TRUE  THEN 1 ELSE 0 END)      AS drogerias_activas,
-            SUM(CASE WHEN d.activa IS FALSE THEN 1 ELSE 0 END)      AS drogerias_inactivas,
-            SUM(CASE WHEN l.estado='activa'  THEN 1 ELSE 0 END)     AS licencias_activas,
-            SUM(CASE WHEN l.estado='vencida' THEN 1 ELSE 0 END)     AS licencias_vencidas
-        FROM usuarios u
-        LEFT JOIN drogerias d ON d.creada_por_id = u.id
-        LEFT JOIN licencias l
-            ON l.drogeria_id = d.id
-            AND l.id = (
-                SELECT id FROM licencias
-                WHERE drogeria_id = d.id
-                ORDER BY id DESC LIMIT 1
-            )
-        WHERE u.rol = 'distributor_admin'
-        GROUP BY u.id, u.nombre, u.email, u.activo
-        ORDER BY total_drogerias DESC
-    """)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -776,9 +636,12 @@ def reporte_gerentes() -> list[dict]:
 # ══════════════════════════════════════════════════════════════
 
 def dashboard_global() -> dict:
-    total_drogerias   = (_fetch_one("SELECT COUNT(*) AS n FROM drogerias WHERE activa IS TRUE") or {}).get("n", 0)
+    d15 = _adapt_interval(15, "+")
+    hoy = _adapt_now_date()
+
+    total_drogerias   = (_fetch_one("SELECT COUNT(*) AS n FROM drogerias WHERE activa=TRUE") or {}).get("n", 0)
     licencias_activas = (_fetch_one("SELECT COUNT(*) AS n FROM licencias WHERE estado='activa'") or {}).get("n", 0)
-    total_usuarios    = (_fetch_one("SELECT COUNT(*) AS n FROM usuarios WHERE activo IS TRUE AND rol!='superadmin'") or {}).get("n", 0)
+    total_usuarios    = (_fetch_one("SELECT COUNT(*) AS n FROM usuarios WHERE activo=TRUE AND rol!='superadmin'") or {}).get("n", 0)
     total_recepciones = (_fetch_one("SELECT COUNT(*) AS n FROM historial") or {}).get("n", 0)
 
     top_drogerias = _fetch_all("""
@@ -792,19 +655,101 @@ def dashboard_global() -> dict:
         ORDER BY recepciones DESC LIMIT 5
     """)
 
-    por_vencer = _fetch_all("""
-        SELECT l.*, d.nombre AS drogeria_nombre
-        FROM licencias l JOIN drogerias d ON l.drogeria_id = d.id
-        WHERE l.estado = 'activa'
-          AND l.vencimiento::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '15 days'
-        ORDER BY l.vencimiento
-    """)
+    if settings.usar_postgres:
+        por_vencer = _fetch_all("""
+            SELECT l.*, d.nombre AS drogeria_nombre
+            FROM licencias l JOIN drogerias d ON l.drogeria_id = d.id
+            WHERE l.estado = 'activa'
+            AND l.vencimiento::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '15 days'
+            ORDER BY l.vencimiento
+        """)
+    else:
+        por_vencer = _fetch_all("""
+            SELECT l.*, d.nombre AS drogeria_nombre
+            FROM licencias l JOIN drogerias d ON l.drogeria_id = d.id
+            WHERE l.estado = 'activa'
+            AND l.vencimiento BETWEEN date('now') AND date('now', '+15 days')
+            ORDER BY l.vencimiento
+        """)
 
     return {
-        "total_drogerias":      total_drogerias,
-        "licencias_activas":    licencias_activas,
-        "total_usuarios":       total_usuarios,
-        "total_recepciones":    total_recepciones,
-        "top_drogerias":        top_drogerias,
+        "total_drogerias": total_drogerias,
+        "licencias_activas": licencias_activas,
+        "total_usuarios": total_usuarios,
+        "total_recepciones": total_recepciones,
+        "top_drogerias": top_drogerias,
         "licencias_por_vencer": por_vencer,
     }
+
+# ══════════════════════════════════════════════════════════════
+#  CONDICIONES AMBIENTALES
+# ══════════════════════════════════════════════════════════════
+
+def guardar_condiciones_dia(
+    drogeria_id: int, usuario_id: int, fecha: str,
+    temperatura_am=None, temperatura_pm=None,
+    humedad_am=None, humedad_pm=None,
+    firma_am: str = "", firma_pm: str = ""
+):
+    """Inserta o actualiza las condiciones de un día (UPSERT)."""
+    if settings.usar_postgres:
+        sql = """
+            INSERT INTO condiciones_ambientales
+                (drogeria_id, usuario_id, fecha, temperatura_am, temperatura_pm,
+                 humedad_am, humedad_pm, firma_am, firma_pm)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (drogeria_id, fecha)
+            DO UPDATE SET
+                usuario_id     = EXCLUDED.usuario_id,
+                temperatura_am = EXCLUDED.temperatura_am,
+                temperatura_pm = EXCLUDED.temperatura_pm,
+                humedad_am     = EXCLUDED.humedad_am,
+                humedad_pm     = EXCLUDED.humedad_pm,
+                firma_am       = EXCLUDED.firma_am,
+                firma_pm       = EXCLUDED.firma_pm
+        """
+    else:
+        sql = """
+            INSERT INTO condiciones_ambientales
+                (drogeria_id, usuario_id, fecha, temperatura_am, temperatura_pm,
+                 humedad_am, humedad_pm, firma_am, firma_pm)
+            VALUES (?,?,?,?,?,?,?,?,?)
+            ON CONFLICT (drogeria_id, fecha)
+            DO UPDATE SET
+                usuario_id     = excluded.usuario_id,
+                temperatura_am = excluded.temperatura_am,
+                temperatura_pm = excluded.temperatura_pm,
+                humedad_am     = excluded.humedad_am,
+                humedad_pm     = excluded.humedad_pm,
+                firma_am       = excluded.firma_am,
+                firma_pm       = excluded.firma_pm
+        """
+    _execute(sql, (drogeria_id, usuario_id, fecha,
+                   temperatura_am, temperatura_pm,
+                   humedad_am, humedad_pm,
+                   firma_am or "", firma_pm or ""))
+
+
+def obtener_condiciones_mes(drogeria_id: int, mes: str) -> list[dict]:
+    """Retorna todos los registros del mes (YYYY-MM) para una droguería."""
+    rows = _fetch_all(
+        _adapt_query(
+            "SELECT * FROM condiciones_ambientales "
+            "WHERE drogeria_id=? AND fecha LIKE ? "
+            "ORDER BY fecha"
+        ),
+        (drogeria_id, f"{mes}%")
+    )
+    return [dict(r) for r in rows]
+
+
+def verificar_alerta_condiciones(drogeria_id: int) -> bool:
+    """Devuelve True si falta el registro de hoy."""
+    hoy = __import__('datetime').date.today().isoformat()
+    row = _fetch_one(
+        _adapt_query(
+            "SELECT id FROM condiciones_ambientales WHERE drogeria_id=? AND fecha=?"
+        ),
+        (drogeria_id, hoy)
+    )
+    return row is None
