@@ -303,88 +303,193 @@ async def buscar_dispositivo(termino: str, limite: int = 20) -> list[dict]:
         raise RuntimeError(f"Error buscando dispositivos: {e}")
 
 
+def _generar_candidatos(palabras: list[str]) -> list[str]:
+    """
+    Genera términos de búsqueda progresivos a partir de las palabras clave del producto.
+    Orden: de más específico (marca + principio) a más general (cada palabra individual).
+
+    Ejemplos:
+      'RECOLECTOR DE ORINA PAQUETE X50 GRAN ANDINA'
+        → ['RECOLECTOR DE', 'RECOLECTOR', 'ORINA', 'PAQUETE', 'GRAN', 'ANDINA']
+      'CYSTOFLO BOLSA ADULTO X2000 ML UND'
+        → ['CYSTOFLO BOLSA', 'CYSTOFLO', 'BOLSA', 'ADULTO']
+      'CIPROFLOXACINO 500MG TAB X10'
+        → ['CIPROFLOXACINO']
+    """
+    candidatos: list[str] = []
+    visto: set[str] = set()
+
+    def agregar(t: str) -> None:
+        t = t.strip()
+        if t and t.upper() not in visto:
+            visto.add(t.upper())
+            candidatos.append(t)
+
+    if not palabras:
+        return []
+
+    # 1. Primeras dos palabras juntas (marca + tipo)
+    if len(palabras) >= 2:
+        agregar(f"{palabras[0]} {palabras[1]}")
+
+    # 2. Solo la primera palabra (principal)
+    agregar(palabras[0])
+
+    # 3. Segunda + tercera (captura principio activo cuando la 1ª es prefijo/marca)
+    if len(palabras) >= 3:
+        agregar(f"{palabras[1]} {palabras[2]}")
+
+    # 4. Cada par de palabras adyacentes (desde la 2ª en adelante)
+    for i in range(1, len(palabras) - 1):
+        agregar(f"{palabras[i]} {palabras[i+1]}")
+
+    # 5. Cada palabra individual >= 5 chars (de la 2ª en adelante)
+    for p in palabras[1:]:
+        if len(p) >= 5:
+            agregar(p)
+
+    # 6. Palabras de 4 chars que no sean abreviaturas
+    for p in palabras:
+        if len(p) == 4 and not p.isupper():
+            agregar(p)
+
+    return candidatos
+
+
+async def _buscar_kw_medicamento(kw: str, nombre_ref: str) -> Optional[dict]:
+    """Busca una palabra clave en medicamentos (vigentes + renovacion). Devuelve el primer resultado relevante."""
+    kw_safe = kw.replace("'", "''")
+    async with httpx.AsyncClient(headers=_headers(), timeout=15) as c:
+        for dataset in ("vigentes", "renovacion"):
+            url = f"{BASE_SOCRATA}/{DATASETS[dataset]}.json"
+            # Estrategia A: búsqueda full-text $q
+            try:
+                r = await c.get(url, params={"$q": kw_safe, "$limit": "3", "$order": "producto ASC"})
+                r.raise_for_status()
+                for item in r.json():
+                    norm = _normalizar_medicamento(item)
+                    if _resultado_relevante(nombre_ref, norm):
+                        return norm
+            except Exception:
+                pass
+            # Estrategia B: LIKE en campo producto
+            try:
+                r = await c.get(url, params={
+                    "$where": f"upper(producto) like upper('%{kw_safe}%')",
+                    "$limit": "3",
+                    "$order": "producto ASC",
+                })
+                r.raise_for_status()
+                for item in r.json():
+                    norm = _normalizar_medicamento(item)
+                    if _resultado_relevante(nombre_ref, norm):
+                        return norm
+            except Exception:
+                pass
+    return None
+
+
+async def _buscar_kw_dispositivo(kw: str, nombre_ref: str) -> Optional[dict]:
+    """Busca una palabra clave en dispositivos médicos. Devuelve el primer resultado relevante."""
+    url = f"{BASE_SOCRATA}/{DATASETS['dispositivos']}.json"
+    kw_safe = kw.replace("'", "''")
+    async with httpx.AsyncClient(headers=_headers(), timeout=15) as c:
+        # Estrategia A: $q full-text
+        try:
+            r = await c.get(url, params={"$q": kw_safe, "$limit": "3"})
+            r.raise_for_status()
+            for item in r.json():
+                norm = _normalizar_dispositivo(item)
+                if _resultado_relevante(nombre_ref, norm):
+                    return norm
+        except Exception:
+            pass
+        # Estrategia B: LIKE en campo nombretecnico
+        try:
+            r = await c.get(url, params={
+                "$where": f"upper(nombretecnico) like upper('%{kw_safe}%')",
+                "$limit": "3",
+            })
+            r.raise_for_status()
+            for item in r.json():
+                norm = _normalizar_dispositivo(item)
+                if _resultado_relevante(nombre_ref, norm):
+                    return norm
+        except Exception:
+            pass
+    return None
+
+
 async def buscar_invima(termino: str, nombre_producto: str = "") -> Optional[dict]:
     """
-    Búsqueda inteligente para el OCR.
-    - nombre_producto: nombre original del producto (para validar relevancia del resultado)
-    1. Si el producto es cosmético/suplemento (NSOC, SHAMPOO, etc.) → None sin buscar
-    2. Si parece RS → buscar_por_registro
-    3. $q full-text
-    4. LIKE con primera palabra del nombre
-    5. Validación de relevancia del resultado
+    Búsqueda multi-estrategia y multi-sección para el OCR.
+
+    Flujo:
+      0. Si el producto es cosmético/suplemento (NSOC, SHAMPOO…) → None inmediato
+      1. Si el término parece RS → buscar_por_registro
+      2. Generar candidatos de búsqueda desde TODAS las secciones del nombre
+         (primera palabra, primeras dos, pares adyacentes, palabras individuales)
+      3. Para cada candidato → buscar en MEDICAMENTOS (vigentes + renovacion)
+      4. Para cada candidato → buscar en DISPOSITIVOS MÉDICOS
+      5. Devolver el primer resultado con relevancia suficiente (>= 15% de palabras en común)
     """
     if not termino or len(termino.strip()) < 2:
         return None
 
     t = termino.strip()
-    # 0. Detectar productos no farmacéuticos → no buscar en INVIMA
     nombre_ref = nombre_producto or t
-    if _es_no_farmaceutico(nombre_ref, rs=t if "INVIMA" in t.upper() or bool(re.match(r'^[A-Z]{2,5}\d', t)) else ""):
+
+    # ── 0. Filtrar cosméticos / suplementos ──────────────────────
+    rs_candidato = t if (
+        "INVIMA" in t.upper() or bool(re.match(r'^[A-Z]{2,5}\d', t.upper()))
+    ) else ""
+    if _es_no_farmaceutico(nombre_ref, rs=rs_candidato):
         return None
 
+    # ── 1. Búsqueda por registro sanitario ───────────────────────
     parece_rs = (
-        "INVIMA" in t.upper() or
-        bool(re.match(r"^20[12]\d[A-Z]-", t.upper())) or
-        (len(t) >= 5 and t.replace("-", "").replace(" ", "").isdigit())
+        "INVIMA" in t.upper()
+        or bool(re.match(r"^20[12]\d[A-Z]-", t.upper()))
+        or bool(re.match(r"^\d{4}[A-Z]{1,2}-\d{5,}", t.upper()))
+        or (len(t) >= 5 and t.replace("-", "").replace(" ", "").isdigit())
     )
 
     if parece_rs:
-        resultado = await buscar_por_registro(t)
-        if resultado:
-            # Para búsqueda por RS, si hay nombre de producto, validar relevancia
-            if nombre_producto and not _resultado_relevante(nombre_producto, resultado):
-                return None
-            return resultado
-
-    # Full-text
-    try:
-        resultados = await buscar_multiples(t, limite=1)
-        if resultados:
-            r = resultados[0]
-            if _resultado_relevante(nombre_ref, r):
-                return r
-    except Exception:
-        pass
-
-    # LIKE con palabras clave extraías del nombre (quita X, mg, formas farm.)
-    palabras_clave = _extraer_palabras_clave(t)
-
-    for palabra in palabras_clave[:3]:  # máx 3 intentos
-        kw = palabra.replace("'", "''")
         try:
-            async with httpx.AsyncClient(headers=_headers(), timeout=20) as c:
-                r = await c.get(
-                    f"{BASE_SOCRATA}/{DATASETS['vigentes']}.json",
-                    params={
-                        "$where": f"upper(producto) like upper('%{kw}%')",
-                        "$limit": "1",
-                        "$order": "producto ASC",
-                    }
-                )
-                r.raise_for_status()
-                data = r.json()
-                if data:
-                    resultado = _normalizar_medicamento(data[0])
-                    if _resultado_relevante(nombre_ref, resultado):
-                        return resultado
+            resultado = await buscar_por_registro(t)
+            if resultado:
+                if nombre_producto and not _resultado_relevante(nombre_producto, resultado):
+                    pass  # No rechazar: si viene de RS, confiar en el RS
+                else:
+                    return resultado
+        except Exception:
+            pass
+
+    # ── 2. Generar candidatos desde el nombre del producto ────────
+    palabras = _extraer_palabras_clave(nombre_ref)
+    candidatos = _generar_candidatos(palabras)
+
+    # Si no hay candidatos, usar el término directamente
+    if not candidatos:
+        candidatos = [nombre_ref]
+
+    # ── 3. Buscar en MEDICAMENTOS con cada candidato ─────────────
+    for kw in candidatos:
+        try:
+            resultado = await _buscar_kw_medicamento(kw, nombre_ref)
+            if resultado:
+                return resultado
         except Exception:
             continue
 
-    # Dispositivos
-    try:
-        dispositivos = await buscar_dispositivo(t, limite=1)
-        if dispositivos:
-            d = dispositivos[0]
-            if _resultado_relevante(nombre_ref, d):
-                return d
-    except Exception:
-        pass
-
-    # Número puro → fragmento RS
-    if re.match(r'^\d{4,}$', t.replace("-", "").replace(" ", "")):
-        resultado = await buscar_por_registro(t)
-        if resultado and _resultado_relevante(nombre_ref, resultado):
-            return resultado
+    # ── 4. Buscar en DISPOSITIVOS con cada candidato ─────────────
+    for kw in candidatos:
+        try:
+            resultado = await _buscar_kw_dispositivo(kw, nombre_ref)
+            if resultado:
+                return resultado
+        except Exception:
+            continue
 
     return None
 
