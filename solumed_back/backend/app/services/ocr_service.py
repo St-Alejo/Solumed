@@ -229,7 +229,15 @@ RE_NO_ES_NOMBRE = re.compile(
     re.IGNORECASE
 )
 RE_OBSEQUIO = re.compile(r'\bOBS\b|\bOBSEQUIO\b|\bMUESTRA\b', re.IGNORECASE)
-RE_CABECERA = re.compile(r'CODIGO.+DESCRIPCI[OÓ]N|DESCRIPCI[OÓ]N.+LOTE|PRODUCTO.+CANTIDAD', re.IGNORECASE)
+RE_CABECERA = re.compile(
+    r'CODIGO.+DESCRIPCI[OÓ]N|DESCRIPCI[OÓ]N.+LOTE|PRODUCTO.+CANTIDAD'
+    r'|REF\.?.+DETALLE.+LOTE|REF\.?.+LOTE.+REG',
+    re.IGNORECASE
+)
+RE_CABECERA_JABES = re.compile(
+    r'REF\.?\s.+DETALLE|DETALLE.+LOTE.+REG\.?SANIT|REF\.?\s+DETALLE\s+LOTE',
+    re.IGNORECASE
+)
 RE_PIE = re.compile(
     r'^(CUFE|VALOR EXCLUIDO|TOTAL A PAGAR|Factura Electr|FIRMA Y SELLO|'
     r'CONSIGNAR|Visualsoft|NOTAS:|SON:|PD/ID)',
@@ -464,10 +472,158 @@ def _parsear_generico(lineas: list[str]) -> list[dict]:
     return productos
 
 
+def _parsear_jabes(lineas: list[str]) -> list[dict]:
+    """
+    Formato Distribuciones JABES SAS (y distribuidoras similares).
+    Columnas: REF. | DETALLE | LOTE | REG.SANIT. | F.VENCE | %IVA | CANT. | VR/UNIT | VR/TOTAL
+
+    Caractírísticas:
+    - REF es un código numérico de 4-6 dígitos (p.ej. 03238)
+    - DETALLE puede ser multilínea (el nombre del producto a veces ocupa 2 renglones)
+    - REG.SANIT. puede ser "2021M-0013188-R1" (sin prefijo INVIMA en la factura)
+    - F.VENCE formato MM-DD-YYYY o YYYY-MM (según digitalización)
+    - CANT. es la cantidad de unidades
+    """
+    # Patron de línea principal JABES:
+    # 03238  TRAMADOL 100MG/2ML C X 10 AMP VITALIS CAJA  A250892  2021M-0013188-R1  11-30-2027  3.00  25,583.33  76,750.00
+    # Los campos pueden alinearse con espacios múltiples (columnas fijas)
+    RE_JABES_PRINCIPAL = re.compile(
+        r'^(\d{4,6})\s+'           # REF (código numérico 4-6 dígitos)
+        r'(.+?)\s+'                # DETALLE (nombre producto, greedy hasta lote)
+        r'(\S{4,12})\s+'           # LOTE (alfanumérico, ej: A250892, 0590-0224)
+        r'(\d{4}[A-Z]{1,2}-\d{7,10}(?:-R\d)?)\s+'  # REG.SANIT (ej: 2021M-0013188-R1)
+        r'(\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2})\s+'  # F.VENCE
+        r'(?:[\d.,]+\s+)?'         # %IVA (opcional)
+        r'([\d.,]+)\s+'            # CANT
+        r'[\d.,]+\s+'              # VR/UNIT
+        r'[\d.,]+'                 # VR/TOTAL
+    )
+    # Patron relaxado: solo REF + nombre (para líneas donde el detalle se parte en 2 renglones)
+    RE_JABES_REF_SOLO = re.compile(r'^(\d{4,6})\s+(.{8,}?)\s*$')
+
+    productos = []
+    producto_actual = None
+    en_tabla = False
+    continuacion = False  # la línea anterior fue REF incompleta
+
+    for linea in lineas:
+        linea = linea.strip()
+        if not linea:
+            continuacion = False
+            continue
+
+        # Detectar cabecera JABES
+        if RE_CABECERA_JABES.search(linea) or re.search(r'REF\.\s+DETALLE', linea, re.IGNORECASE):
+            en_tabla = True
+            continuacion = False
+            continue
+
+        if en_tabla and RE_PIE.search(linea):
+            if producto_actual:
+                productos.append(producto_actual)
+                producto_actual = None
+            en_tabla = False
+            continue
+
+        if not en_tabla:
+            continue
+
+        # Ignorar obsequios/muestras
+        if RE_OBSEQUIO.search(linea):
+            continuacion = False
+            continue
+
+        # Intentar match completo
+        m = RE_JABES_PRINCIPAL.match(linea)
+        if m:
+            if producto_actual:
+                productos.append(producto_actual)
+
+            # Normalizar vencimiento a YYYY-MM
+            venc_raw = m.group(5).strip()
+            venc = _normalizar_fecha_jabes(venc_raw)
+
+            # Normalizar registro sanitario
+            rs = m.group(4).strip()
+            if not rs.upper().startswith("INVIMA"):
+                rs = f"INVIMA {rs}"
+
+            # Normalizar cantidad (puede venir como "3.00")
+            cant_str = m.group(6).replace(',', '.').split('.')[0]
+            try:
+                cantidad = int(float(cant_str))
+            except Exception:
+                cantidad = 1
+
+            producto_actual = {
+                'codigo_producto':            m.group(1).strip(),
+                'nombre_producto':            m.group(2).strip(),
+                'lote':                       m.group(3).strip().upper(),
+                'vencimiento':                venc,
+                'cantidad':                   cantidad,
+                'registro_sanitario_factura': rs,
+            }
+            continuacion = False
+            continue
+
+        # Si no hubo match completo, intentar extender nombre de producto anterior
+        # (el DETALLE a veces ocupa 2 renglones)
+        if continuacion and producto_actual and not re.match(r'^\d{4,6}\s', linea):
+            # La línea es continuación del nombre del producto
+            producto_actual['nombre_producto'] += ' ' + linea
+            continue
+
+        # Tentativa: solo REF + nombre parcial (data aún incompleta en siguiente línea)
+        m_ref = RE_JABES_REF_SOLO.match(linea)
+        if m_ref and not re.search(r'\d{4}-\d{2}', linea):
+            if producto_actual:
+                productos.append(producto_actual)
+            producto_actual = {
+                'codigo_producto':            m_ref.group(1).strip(),
+                'nombre_producto':            m_ref.group(2).strip(),
+                'lote':                       '',
+                'vencimiento':                '',
+                'cantidad':                   1,
+                'registro_sanitario_factura': '',
+            }
+            continuacion = True
+            continue
+
+    if producto_actual:
+        productos.append(producto_actual)
+
+    # Filtrar productos incompletos (sin nombre o con nombre muy corto)
+    return [p for p in productos if len(p.get('nombre_producto', '')) >= 5]
+
+
+def _normalizar_fecha_jabes(fecha: str) -> str:
+    """
+    Convierte fechas de formato JABES a YYYY-MM.
+    Soporta: MM-DD-YYYY, YYYY-MM-DD, YYYY-MM
+    """
+    # MM-DD-YYYY (formato americano que usa JABES: 11-30-2027)
+    m = re.match(r'^(\d{2})-(\d{2})-(\d{4})$', fecha)
+    if m:
+        return f"{m.group(3)}-{m.group(1)}"
+    # YYYY-MM-DD
+    m = re.match(r'^(\d{4})-(\d{2})-\d{2}$', fecha)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+    # YYYY-MM (ya está bien)
+    m = re.match(r'^(\d{4}-\d{2})$', fecha)
+    if m:
+        return fecha
+    return fecha
+
+
 def _detectar_formato(lineas: list[str]) -> str:
     cabecera = " ".join(lineas[:40]).upper()
     if "891.200.235" in cabecera or "DISTRIMAYOR" in cabecera:
         return "DISTRIMAYOR"
+    # JABES: detectar por NIT, nombre empresa, o cabecera de tabla característica
+    if ("901354014" in cabecera or "JABES" in cabecera
+            or re.search(r'REF[\.\s]+DETALLE[\s]+LOTE', cabecera)):
+        return "JABES"
     formato_a = sum(1 for l in lineas[:80] if RE_FORMATO_A.match(l.strip()))
     formato_b = sum(1 for l in lineas[:80] if RE_RS_CUM_VEN.search(l) and 'Reg.Sanit' in l)
     if formato_b > formato_a:
@@ -486,16 +642,16 @@ def _extraer_metadatos_regex(lineas: list[str]) -> tuple[str, str]:
     re_factura = re.compile(
         r'(?:'
         # "FACTURA ... No. FE-12345" o "FACTURA ... # 000395"
-        r'(?:FACTURA(?:\s+ELECTR[OO]NICA)?(?:\s+DE\s+VENTA)?)\s*(?:N[Oo]\.?|NUMERO|#|No\.?)\s*:?\s*([A-Z]{0,4}\d[A-Z0-9\-]{2,19})'
+        r'(?:FACTURA(?:\s+ELECTR[OI]NICA)?(?:\s+DE\s+VENTA)?)\s*(?:N[Oo]\.?|NUMERO|#|No\.?)?\s*:?\s*([A-Z]{0,4}\s?\d[A-Z0-9\-\s]{2,19})'
         r'|'
         # "No. FACTURA: FVE-000395"
         r'(?:N[Oo]\.?|#)\s*(?:DE\s+)?FACTURA\s*:?\s*([A-Z]{0,4}\d[A-Z0-9\-]{2,19})'
         r'|'
-        # "FVE-000395318" o "FVE 000395318" aparece solo → captura prefijo+numero
+        # "FVE-000395318" o "FVE 000395318" aparece solo
         r'\b(FVE[-_\s]?\d{5,15})\b'
         r'|'
-        # "FE-12345" aparece solo → captura prefijo+numero
-        r'\b(FE[-_]\d{5,15})\b'
+        # "FE-12345" o "FE 12345" aparece solo
+        r'\b(FE[-_\s]\d{4,10})\b'
         r')',
         re.IGNORECASE
     )
@@ -515,8 +671,10 @@ def _extraer_metadatos_regex(lineas: list[str]) -> tuple[str, str]:
                 val = next((g for g in m.groups() if g), "").strip()
                 # Verificar que tenga al menos un digito (descartar palabras puras como "ELECTRONICA")
                 if val and any(c.isdigit() for c in val):
-                    # Normalizar separador: FVE 395318 / FVE_395318 → FVE-395318
-                    val = re.sub(r'^(FVE|FE)[-_\s]+', lambda m: f"{m.group(1).upper()}-", val, flags=re.IGNORECASE)
+                    # Normalizar: "FE 50624" → "FE-50624"
+                    val = re.sub(r'^(FVE|FE)[-_\s]+', lambda mo: f"{mo.group(1).upper()}-", val, flags=re.IGNORECASE)
+                    # Quitar espacios internos residuales
+                    val = val.strip()
                     factura_id = val
         if not proveedor and (re_empresa.search(txt) or re_nit.search(txt)):
             prov = re.sub(r'NIT.*', '', txt, flags=re.IGNORECASE).strip()
@@ -542,7 +700,9 @@ def _extraer_id_desde_filename(filename: str) -> str:
 
 def _parsear_lineas(lineas: list[str], filename: str = "") -> tuple[list[dict], str, str]:
     formato = _detectar_formato(lineas)
-    if formato == "DISTRIMAYOR":
+    if formato == "JABES":
+        productos = _parsear_jabes(lineas)
+    elif formato == "DISTRIMAYOR":
         productos = _parsear_distrimayor(lineas)
     elif formato == "A":
         productos = _parsear_formato_a(lineas)
@@ -550,13 +710,14 @@ def _parsear_lineas(lineas: list[str], filename: str = "") -> tuple[list[dict], 
         productos = _parsear_formato_b(lineas)
     else:
         productos = _parsear_generico(lineas)
-    if len(productos) < 2:
+
+    # Fallback: si extrajimos poco, intentar otro formato
+    if len(productos) < 2 and formato not in ("JABES", "DISTRIMAYOR"):
         alt = _parsear_formato_b(lineas) if formato == "A" else _parsear_formato_a(lineas)
         if len(alt) > len(productos):
             productos = alt
 
     f_id, prov = _extraer_metadatos_regex(lineas)
-    # Fallback: si no se extrajo el ID, intentar desde el nombre del archivo
     if not f_id and filename:
         f_id = _extraer_id_desde_filename(filename)
     return productos, f_id, prov
