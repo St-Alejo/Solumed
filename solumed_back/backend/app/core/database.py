@@ -753,3 +753,157 @@ def verificar_alerta_condiciones(drogeria_id: int) -> bool:
         (drogeria_id, hoy)
     )
     return row is None
+
+
+# ══════════════════════════════════════════════════════════════
+#  SESIONES (control de dispositivos)
+# ══════════════════════════════════════════════════════════════
+
+LIMITE_SESIONES = {
+    "superadmin":        0,
+    "distributor_admin": 1,
+    "admin":             3,
+    "regente":           3,
+}
+
+
+def crear_sesion(usuario_id: int, token_jti: str, expira_en: str,
+                 device_info: str = "") -> int:
+    return _execute(
+        "INSERT INTO sesiones (usuario_id, token_jti, expira_en, device_info) VALUES (?,?,?,?)",
+        (usuario_id, token_jti, expira_en, device_info)
+    )
+
+
+def sesion_valida(token_jti: str) -> bool:
+    row = _fetch_one(
+        "SELECT id FROM sesiones WHERE token_jti=? AND activa IS TRUE",
+        (token_jti,)
+    )
+    return row is not None
+
+
+def invalidar_sesion(token_jti: str):
+    _execute("UPDATE sesiones SET activa=FALSE WHERE token_jti=?", (token_jti,))
+
+
+def cerrar_todas_sesiones(usuario_id: int):
+    _execute(
+        "UPDATE sesiones SET activa=FALSE WHERE usuario_id=? AND activa IS TRUE",
+        (usuario_id,)
+    )
+
+
+def limpiar_sesiones_exceso(usuario_id: int, rol: str) -> int:
+    limite = LIMITE_SESIONES.get(rol, 3)
+    if limite == 0:
+        return 0
+    activas = _fetch_all(
+        "SELECT id, token_jti FROM sesiones WHERE usuario_id=? AND activa IS TRUE ORDER BY id ASC",
+        (usuario_id,)
+    )
+    exceso = len(activas) - (limite - 1)
+    if exceso <= 0:
+        return 0
+    for s in activas[:exceso]:
+        invalidar_sesion(s["token_jti"])
+    return exceso
+
+
+# ══════════════════════════════════════════════════════════════
+#  DISTRIBUIDORES
+# ══════════════════════════════════════════════════════════════
+
+def listar_distribuidores() -> list[dict]:
+    return _fetch_all("""
+        SELECT u.id, u.email, u.nombre, u.activo, u.creado_en, u.ultimo_login,
+               COUNT(DISTINCT d.id) AS total_drogerias,
+               SUM(CASE WHEN d.activa IS TRUE THEN 1 ELSE 0 END) AS drogerias_activas
+        FROM usuarios u
+        LEFT JOIN drogerias d ON d.creada_por_id = u.id
+        WHERE u.rol = 'distributor_admin'
+        GROUP BY u.id, u.email, u.nombre, u.activo, u.creado_en, u.ultimo_login
+        ORDER BY u.nombre
+    """)
+
+
+def dashboard_gerente(distributor_id: int) -> dict:
+    total = (_fetch_one(
+        "SELECT COUNT(*) AS n FROM drogerias WHERE creada_por_id=?", (distributor_id,)
+    ) or {}).get("n", 0)
+    activas = (_fetch_one(
+        "SELECT COUNT(*) AS n FROM drogerias WHERE creada_por_id=? AND activa IS TRUE", (distributor_id,)
+    ) or {}).get("n", 0)
+    return {
+        "total_drogerias":     total,
+        "drogerias_activas":   activas,
+        "drogerias_inactivas": total - activas,
+    }
+
+
+def reporte_gerentes() -> list[dict]:
+    return _fetch_all("""
+        SELECT
+            u.id AS gerente_id, u.nombre AS gerente_nombre,
+            u.email AS gerente_email, u.activo AS gerente_activo,
+            COUNT(DISTINCT d.id) AS total_drogerias,
+            SUM(CASE WHEN d.activa IS TRUE  THEN 1 ELSE 0 END) AS drogerias_activas,
+            SUM(CASE WHEN d.activa IS FALSE THEN 1 ELSE 0 END) AS drogerias_inactivas,
+            SUM(CASE WHEN l.estado='activa'  THEN 1 ELSE 0 END) AS licencias_activas,
+            SUM(CASE WHEN l.estado='vencida' THEN 1 ELSE 0 END) AS licencias_vencidas
+        FROM usuarios u
+        LEFT JOIN drogerias d ON d.creada_por_id = u.id
+        LEFT JOIN licencias l ON l.drogeria_id = d.id
+            AND l.id = (SELECT id FROM licencias WHERE drogeria_id = d.id ORDER BY id DESC LIMIT 1)
+        WHERE u.rol = 'distributor_admin'
+        GROUP BY u.id, u.nombre, u.email, u.activo
+        ORDER BY total_drogerias DESC
+    """)
+
+
+# ══════════════════════════════════════════════════════════════
+#  DASHBOARD GLOBAL (superadmin)
+# ══════════════════════════════════════════════════════════════
+
+def dashboard_global() -> dict:
+    total_drogerias   = (_fetch_one("SELECT COUNT(*) AS n FROM drogerias WHERE activa IS TRUE") or {}).get("n", 0)
+    licencias_activas = (_fetch_one("SELECT COUNT(*) AS n FROM licencias WHERE estado='activa'") or {}).get("n", 0)
+    total_usuarios    = (_fetch_one("SELECT COUNT(*) AS n FROM usuarios WHERE activo IS TRUE AND rol!='superadmin'") or {}).get("n", 0)
+    total_recepciones = (_fetch_one("SELECT COUNT(*) AS n FROM historial") or {}).get("n", 0)
+
+    top_drogerias = _fetch_all("""
+        SELECT d.nombre, d.ciudad,
+               COUNT(DISTINCT h.id) AS recepciones,
+               l.estado AS lic_estado, l.vencimiento AS lic_vencimiento
+        FROM drogerias d
+        LEFT JOIN historial h ON h.drogeria_id = d.id
+        LEFT JOIN licencias l ON l.drogeria_id = d.id AND l.estado = 'activa'
+        GROUP BY d.id, d.nombre, d.ciudad, l.estado, l.vencimiento
+        ORDER BY recepciones DESC LIMIT 5
+    """)
+
+    if settings.usar_postgres:
+        por_vencer = _fetch_all("""
+            SELECT l.*, d.nombre AS drogeria_nombre
+            FROM licencias l JOIN drogerias d ON l.drogeria_id = d.id
+            WHERE l.estado = 'activa'
+            AND l.vencimiento::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '15 days'
+            ORDER BY l.vencimiento
+        """)
+    else:
+        por_vencer = _fetch_all("""
+            SELECT l.*, d.nombre AS drogeria_nombre
+            FROM licencias l JOIN drogerias d ON l.drogeria_id = d.id
+            WHERE l.estado = 'activa'
+            AND l.vencimiento BETWEEN date('now') AND date('now', '+15 days')
+            ORDER BY l.vencimiento
+        """)
+
+    return {
+        "total_drogerias":      total_drogerias,
+        "licencias_activas":    licencias_activas,
+        "total_usuarios":       total_usuarios,
+        "total_recepciones":    total_recepciones,
+        "top_drogerias":        top_drogerias,
+        "licencias_por_vencer": por_vencer,
+    }
