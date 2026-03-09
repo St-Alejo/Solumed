@@ -178,7 +178,6 @@ def crear_lic(body: LicenciaCreate, u=Depends(require_distributor_o_superior)):
     lid = crear_licencia(
         body.drogeria_id, body.plan, body.inicio,
         body.vencimiento, body.max_usuarios, body.precio_cop, body.notas,
-        creada_por_id=u["id"],
     )
     return {
         "ok": True,
