@@ -298,6 +298,20 @@ export function useApi() {
       eliminar: (id: number) => apiFetch(`/api/alarmas/${id}`, { method: "DELETE" }),
       urgentes: () => apiFetch("/api/alarmas/urgentes"),
     },
+
+    credito: {
+      resumen: () => apiFetch("/api/credito/resumen"),
+      listar: () => apiFetch("/api/credito"),
+      detalle: (id: number) => apiFetch(`/api/credito/${id}`),
+      crear: (data: any) => apiFetch("/api/credito", { method: "POST", body: JSON.stringify(data) }),
+      actualizar: (id: number, data: any) =>
+        apiFetch(`/api/credito/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+      eliminar: (id: number) => apiFetch(`/api/credito/${id}`, { method: "DELETE" }),
+      registrarPago: (facturaId: number, data: any) =>
+        apiFetch(`/api/credito/${facturaId}/pagos`, { method: "POST", body: JSON.stringify(data) }),
+      eliminarPago: (facturaId: number, pagoId: number) =>
+        apiFetch(`/api/credito/${facturaId}/pagos/${pagoId}`, { method: "DELETE" }),
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [apiFetch, apiForm, token]); // token solo para descargarUrl que lo usa directamente
 }

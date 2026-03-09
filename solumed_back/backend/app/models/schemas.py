@@ -370,3 +370,131 @@ class AlarmaUpdate(BaseModel):
         except ValueError:
             raise ValueError("Formato de fecha inválido. Usa YYYY-MM-DD")
         return str(v)
+
+
+# ══════════════════════════════════════════════════════
+#  FACTURAS A CRÉDITO
+# ══════════════════════════════════════════════════════
+
+def _fecha_valida_opcional(v) -> str:
+    v = str(v or "").strip()
+    if v:
+        try:
+            date.fromisoformat(v)
+        except ValueError:
+            raise ValueError(f"Fecha inválida '{v}'. Usa YYYY-MM-DD")
+    return v
+
+
+class FacturaCreditoCreate(BaseModel):
+    model_config = {"extra": "ignore"}
+
+    proveedor_nombre:    str = ""
+    proveedor_empresa:   str = ""
+    proveedor_telefono:  str = ""
+    proveedor_email:     str = ""
+    proveedor_direccion: str = ""
+
+    numero_factura:      str = ""
+    fecha_recepcion:     str = ""
+    fecha_limite_pago:   str
+    monto_total:         float = Field(..., ge=0)
+    descripcion:         str = ""
+    estado:              str = Field("pendiente", pattern="^(pendiente|pagando|pagada)$")
+
+    tipo_credito:        str = Field("30_dias", pattern="^(30_dias|60_dias|cuotas|otro)$")
+    num_cuotas:          int = Field(1, ge=1, le=500)
+    valor_cuota:         float = Field(0, ge=0)
+    fecha_primer_pago:   str = ""
+    pago_inicial:        float = Field(0, ge=0)
+
+    responsable:         str = ""
+    notas:               str = ""
+
+    @field_validator("fecha_limite_pago", mode="before")
+    @classmethod
+    def fecha_limite_valida(cls, v: str) -> str:
+        v = str(v or "").strip()
+        if not v:
+            raise ValueError("La fecha límite de pago es obligatoria")
+        try:
+            date.fromisoformat(v)
+        except ValueError:
+            raise ValueError(f"Fecha límite inválida '{v}'. Usa YYYY-MM-DD")
+        return v
+
+    @field_validator("fecha_recepcion", "fecha_primer_pago", mode="before")
+    @classmethod
+    def fechas_opcionales(cls, v) -> str:
+        return _fecha_valida_opcional(v)
+
+    @field_validator("monto_total", mode="before")
+    @classmethod
+    def monto_valido(cls, v) -> float:
+        try:
+            val = float(v or 0)
+            if val < 0:
+                raise ValueError()
+            return val
+        except (ValueError, TypeError):
+            raise ValueError("El monto total debe ser un número positivo")
+
+
+class FacturaCreditoUpdate(BaseModel):
+    model_config = {"extra": "ignore"}
+
+    proveedor_nombre:    Optional[str] = None
+    proveedor_empresa:   Optional[str] = None
+    proveedor_telefono:  Optional[str] = None
+    proveedor_email:     Optional[str] = None
+    proveedor_direccion: Optional[str] = None
+    numero_factura:      Optional[str] = None
+    fecha_recepcion:     Optional[str] = None
+    fecha_limite_pago:   Optional[str] = None
+    monto_total:         Optional[float] = Field(None, ge=0)
+    descripcion:         Optional[str] = None
+    estado:              Optional[str] = Field(None, pattern="^(pendiente|pagando|pagada)$")
+    tipo_credito:        Optional[str] = Field(None, pattern="^(30_dias|60_dias|cuotas|otro)$")
+    num_cuotas:          Optional[int] = Field(None, ge=1)
+    valor_cuota:         Optional[float] = Field(None, ge=0)
+    fecha_primer_pago:   Optional[str] = None
+    pago_inicial:        Optional[float] = Field(None, ge=0)
+    responsable:         Optional[str] = None
+    notas:               Optional[str] = None
+
+    @field_validator("fecha_limite_pago", "fecha_recepcion", "fecha_primer_pago", mode="before")
+    @classmethod
+    def fechas_update(cls, v) -> Optional[str]:
+        if v is None:
+            return None
+        return _fecha_valida_opcional(v)
+
+
+class PagoCreditoCreate(BaseModel):
+    fecha_pago: str
+    monto:      float = Field(..., gt=0)
+    num_cuota:  int = Field(0, ge=0)
+    notas:      str = ""
+
+    @field_validator("fecha_pago", mode="before")
+    @classmethod
+    def fecha_pago_valida(cls, v: str) -> str:
+        v = str(v or "").strip()
+        if not v:
+            raise ValueError("La fecha de pago es obligatoria")
+        try:
+            date.fromisoformat(v)
+        except ValueError:
+            raise ValueError(f"Fecha de pago inválida. Usa YYYY-MM-DD")
+        return v
+
+    @field_validator("monto", mode="before")
+    @classmethod
+    def monto_positivo(cls, v) -> float:
+        try:
+            val = float(v)
+            if val <= 0:
+                raise ValueError()
+            return val
+        except (ValueError, TypeError):
+            raise ValueError("El monto del pago debe ser mayor a cero")

@@ -276,6 +276,49 @@ def inicializar():
             )
         """)
 
+        # ── facturas_credito ───────────────────────────────────
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS facturas_credito (
+                id                   SERIAL PRIMARY KEY,
+                drogeria_id          INTEGER NOT NULL REFERENCES drogerias(id),
+                usuario_id           INTEGER REFERENCES usuarios(id),
+                proveedor_nombre     TEXT DEFAULT '',
+                proveedor_empresa    TEXT DEFAULT '',
+                proveedor_telefono   TEXT DEFAULT '',
+                proveedor_email      TEXT DEFAULT '',
+                proveedor_direccion  TEXT DEFAULT '',
+                numero_factura       TEXT DEFAULT '',
+                fecha_recepcion      TEXT DEFAULT '',
+                fecha_limite_pago    TEXT NOT NULL,
+                monto_total          NUMERIC(14,2) DEFAULT 0,
+                descripcion          TEXT DEFAULT '',
+                estado               TEXT DEFAULT 'pendiente',
+                tipo_credito         TEXT DEFAULT '30_dias',
+                num_cuotas           INTEGER DEFAULT 1,
+                valor_cuota          NUMERIC(14,2) DEFAULT 0,
+                fecha_primer_pago    TEXT DEFAULT '',
+                pago_inicial         NUMERIC(14,2) DEFAULT 0,
+                responsable          TEXT DEFAULT '',
+                notas                TEXT DEFAULT '',
+                ruta_documento       TEXT DEFAULT '',
+                creada_en            TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
+        # ── pagos_credito ──────────────────────────────────────
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS pagos_credito (
+                id          SERIAL PRIMARY KEY,
+                factura_id  INTEGER NOT NULL REFERENCES facturas_credito(id) ON DELETE CASCADE,
+                drogeria_id INTEGER NOT NULL REFERENCES drogerias(id),
+                fecha_pago  TEXT NOT NULL,
+                monto       NUMERIC(14,2) NOT NULL,
+                num_cuota   INTEGER DEFAULT 0,
+                notas       TEXT DEFAULT '',
+                creado_en   TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
         # ── Índices (autocommit: cada uno es independiente) ───
         for idx_sql in [
             "CREATE INDEX IF NOT EXISTS idx_usr_email       ON usuarios(email)",
@@ -288,6 +331,9 @@ def inicializar():
             "CREATE INDEX IF NOT EXISTS idx_ses_usuario     ON sesiones(usuario_id)",
             "CREATE INDEX IF NOT EXISTS idx_alarmas_drog    ON alarmas(drogeria_id)",
             "CREATE INDEX IF NOT EXISTS idx_alarmas_estado  ON alarmas(estado)",
+            "CREATE INDEX IF NOT EXISTS idx_faccred_drog    ON facturas_credito(drogeria_id)",
+            "CREATE INDEX IF NOT EXISTS idx_faccred_estado  ON facturas_credito(estado)",
+            "CREATE INDEX IF NOT EXISTS idx_pagcred_fac     ON pagos_credito(factura_id)",
         ]:
             try:
                 cur.execute(idx_sql)
@@ -874,3 +920,116 @@ def contar_alarmas_urgentes(drogeria_id: int) -> int:
         (drogeria_id,)
     )
     return row["n"] if row else 0
+
+
+# ══════════════════════════════════════════════════════════════
+#  FACTURAS A CRÉDITO
+# ══════════════════════════════════════════════════════════════
+
+def crear_factura_credito(drogeria_id: int, usuario_id: int, **campos) -> int:
+    cols = list(campos.keys())
+    vals = list(campos.values())
+    placeholders = ", ".join(["%s"] * len(cols))
+    col_str = ", ".join(cols)
+    return _execute(
+        f"INSERT INTO facturas_credito (drogeria_id, usuario_id, {col_str}) "
+        f"VALUES (%s, %s, {placeholders})",
+        tuple([drogeria_id, usuario_id] + vals)
+    )
+
+
+def listar_facturas_credito(drogeria_id: int) -> list[dict]:
+    return _fetch_all("""
+        SELECT fc.*,
+               COALESCE(SUM(p.monto), 0)   AS total_pagado,
+               fc.monto_total - COALESCE(SUM(p.monto), 0) AS saldo_pendiente,
+               COUNT(p.id)                  AS cuotas_pagadas
+        FROM facturas_credito fc
+        LEFT JOIN pagos_credito p ON p.factura_id = fc.id
+        WHERE fc.drogeria_id = %s
+        GROUP BY fc.id
+        ORDER BY
+          CASE WHEN fc.fecha_limite_pago < CURRENT_DATE::TEXT AND fc.estado != 'pagada' THEN 0 ELSE 1 END,
+          fc.fecha_limite_pago ASC
+    """, (drogeria_id,))
+
+
+def get_factura_credito(factura_id: int, drogeria_id: int) -> Optional[dict]:
+    return _fetch_one("""
+        SELECT fc.*,
+               COALESCE(SUM(p.monto), 0)   AS total_pagado,
+               fc.monto_total - COALESCE(SUM(p.monto), 0) AS saldo_pendiente,
+               COUNT(p.id)                  AS cuotas_pagadas
+        FROM facturas_credito fc
+        LEFT JOIN pagos_credito p ON p.factura_id = fc.id
+        WHERE fc.id = %s AND fc.drogeria_id = %s
+        GROUP BY fc.id
+    """, (factura_id, drogeria_id))
+
+
+def actualizar_factura_credito(factura_id: int, drogeria_id: int, **campos):
+    if not campos:
+        return
+    sets = ", ".join(f"{k}=%s" for k in campos)
+    _execute(
+        f"UPDATE facturas_credito SET {sets} WHERE id=%s AND drogeria_id=%s",
+        tuple(campos.values()) + (factura_id, drogeria_id)
+    )
+
+
+def eliminar_factura_credito(factura_id: int, drogeria_id: int):
+    _execute(
+        "DELETE FROM facturas_credito WHERE id=%s AND drogeria_id=%s",
+        (factura_id, drogeria_id)
+    )
+
+
+def resumen_creditos(drogeria_id: int) -> dict:
+    """Estadísticas globales de crédito para la droguería."""
+    row = _fetch_one("""
+        SELECT
+            COUNT(*)                                                       AS total,
+            COALESCE(SUM(fc.monto_total), 0)                              AS monto_total,
+            COALESCE(SUM(COALESCE(p_agg.total_p, 0)), 0)                 AS total_pagado,
+            COALESCE(SUM(fc.monto_total - COALESCE(p_agg.total_p,0)), 0) AS saldo_pendiente,
+            COUNT(CASE WHEN fc.estado = 'pendiente' THEN 1 END)           AS pendientes,
+            COUNT(CASE WHEN fc.estado = 'pagando'   THEN 1 END)           AS pagando,
+            COUNT(CASE WHEN fc.estado = 'pagada'    THEN 1 END)           AS pagadas,
+            COUNT(CASE WHEN fc.fecha_limite_pago < CURRENT_DATE::TEXT
+                            AND fc.estado != 'pagada' THEN 1 END)         AS vencidas
+        FROM facturas_credito fc
+        LEFT JOIN (
+            SELECT factura_id, SUM(monto) AS total_p
+            FROM pagos_credito GROUP BY factura_id
+        ) p_agg ON p_agg.factura_id = fc.id
+        WHERE fc.drogeria_id = %s
+    """, (drogeria_id,))
+    return row or {}
+
+
+# ── Pagos ──────────────────────────────────────────────────────
+
+def registrar_pago_credito(
+    factura_id: int, drogeria_id: int,
+    fecha_pago: str, monto: float,
+    num_cuota: int = 0, notas: str = ""
+) -> int:
+    return _execute(
+        "INSERT INTO pagos_credito (factura_id, drogeria_id, fecha_pago, monto, num_cuota, notas) "
+        "VALUES (%s,%s,%s,%s,%s,%s)",
+        (factura_id, drogeria_id, fecha_pago, monto, num_cuota, notas)
+    )
+
+
+def listar_pagos_factura(factura_id: int, drogeria_id: int) -> list[dict]:
+    return _fetch_all(
+        "SELECT * FROM pagos_credito WHERE factura_id=%s AND drogeria_id=%s ORDER BY fecha_pago ASC, id ASC",
+        (factura_id, drogeria_id)
+    )
+
+
+def eliminar_pago_credito(pago_id: int, drogeria_id: int):
+    _execute(
+        "DELETE FROM pagos_credito WHERE id=%s AND drogeria_id=%s",
+        (pago_id, drogeria_id)
+    )

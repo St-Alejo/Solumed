@@ -7,7 +7,7 @@ import {
   FlaskConical, ClipboardCheck, History, Search,
   FileText, Users, LogOut, ChevronRight, X, Menu,
   Building2, Key, AlertTriangle, Sun, Moon,
-  Thermometer, Bell
+  Thermometer, Bell, CreditCard
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { diasHasta } from "@/lib/utils";
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: "/historial", label: "Historial", icon: History, desc: "Recepciones anteriores" },
   { href: "/condiciones", label: "Control Ambiental", icon: Thermometer, desc: "Temperatura y Humedad" },
   { href: "/alarmas", label: "Alarmas", icon: Bell, desc: "Recordatorios y vencimientos" },
+  { href: "/credito", label: "Créditos", icon: CreditCard, desc: "Facturas a crédito" },
   { href: "/invima", label: "INVIMA", icon: Search, desc: "Consultar catálogo" },
   { href: "/reportes", label: "Reportes", icon: FileText, desc: "PDFs generados" },
   { href: "/usuarios", label: "Usuarios", icon: Users, desc: "Gestionar equipo" },
