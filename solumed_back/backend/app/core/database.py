@@ -125,18 +125,16 @@ def inicializar():
         # ── drogerias ─────────────────────────────────────────
         cur.execute(f"""
             CREATE TABLE IF NOT EXISTS drogerias (
-                id              {text_pk},
-                nombre          TEXT NOT NULL,
-                nit             TEXT UNIQUE,
-                ciudad          TEXT DEFAULT '',
-                direccion       TEXT DEFAULT '',
-                telefono        TEXT DEFAULT '',
-                email           TEXT DEFAULT '',
-                logo_url        TEXT DEFAULT '',
-                activa          {bool_type},
-                creada_en       {date_now},
-                creada_por_id   INTEGER DEFAULT NULL,
-                creada_por_rol  TEXT DEFAULT ''
+                id        {text_pk},
+                nombre    TEXT NOT NULL,
+                nit       TEXT UNIQUE,
+                ciudad    TEXT DEFAULT '',
+                direccion TEXT DEFAULT '',
+                telefono  TEXT DEFAULT '',
+                email     TEXT DEFAULT '',
+                logo_url  TEXT DEFAULT '',
+                activa    {bool_type},
+                creada_en {date_now}
             )
         """)
 
@@ -244,7 +242,30 @@ def inicializar():
 
         con.commit()
 
-        # ── Migración: columnas nuevas en drogerias ────────────
+        # ── sesiones ──────────────────────────────────────────
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS sesiones (
+                id          {text_pk},
+                usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                token_jti   TEXT NOT NULL UNIQUE,
+                device_info TEXT DEFAULT '',
+                creada_en   {ts_now},
+                expira_en   TEXT NOT NULL,
+                activa      {bool_type}
+            )
+        """)
+        for sql in [
+            "CREATE INDEX IF NOT EXISTS idx_ses_usuario ON sesiones(usuario_id)",
+            "CREATE INDEX IF NOT EXISTS idx_ses_jti     ON sesiones(token_jti)",
+        ]:
+            try:
+                cur.execute(sql)
+            except Exception:
+                pass
+
+        con.commit()
+
+        # ── Migraciones seguras ────────────────────────────────
         for col, definition in [
             ("creada_por_id",  "INTEGER DEFAULT NULL"),
             ("creada_por_rol", "TEXT DEFAULT ''"),
@@ -252,9 +273,8 @@ def inicializar():
             try:
                 cur.execute(f"ALTER TABLE drogerias ADD COLUMN {col} {definition}")
                 con.commit()
-                print(f"✅ Columna drogerias.{col} añadida (migración)")
             except Exception:
-                pass  # Ya existe — ignorar
+                pass  # Ya existe
 
         # ── Superadmin por defecto ─────────────────────────────
         cur.execute("SELECT id FROM usuarios WHERE rol='superadmin' LIMIT 1")
@@ -465,12 +485,11 @@ def cambiar_password(uid: int, nueva: str):
 # ══════════════════════════════════════════════════════════════
 
 def crear_drogeria(nombre: str, nit: str = "", ciudad: str = "",
-                   direccion: str = "", telefono: str = "", email: str = "",
-                   creada_por_id: int = None, creada_por_rol: str = "") -> int:
+                   direccion: str = "", telefono: str = "", email: str = "") -> int:
     return _execute("""
-        INSERT INTO drogerias (nombre, nit, ciudad, direccion, telefono, email, creada_por_id, creada_por_rol)
-        VALUES (?,?,?,?,?,?,?,?)
-    """, (nombre, nit, ciudad, direccion, telefono, email, creada_por_id, creada_por_rol))
+        INSERT INTO drogerias (nombre, nit, ciudad, direccion, telefono, email)
+        VALUES (?,?,?,?,?,?)
+    """, (nombre, nit, ciudad, direccion, telefono, email))
 
 
 def get_drogeria(did: int) -> Optional[dict]:
@@ -909,46 +928,3 @@ def reporte_gerentes() -> list[dict]:
 # ══════════════════════════════════════════════════════════════
 #  DASHBOARD GLOBAL (superadmin)
 # ══════════════════════════════════════════════════════════════
-
-def dashboard_global() -> dict:
-    total_drogerias   = (_fetch_one("SELECT COUNT(*) AS n FROM drogerias WHERE activa IS TRUE") or {}).get("n", 0)
-    licencias_activas = (_fetch_one("SELECT COUNT(*) AS n FROM licencias WHERE estado='activa'") or {}).get("n", 0)
-    total_usuarios    = (_fetch_one("SELECT COUNT(*) AS n FROM usuarios WHERE activo IS TRUE AND rol!='superadmin'") or {}).get("n", 0)
-    total_recepciones = (_fetch_one("SELECT COUNT(*) AS n FROM historial") or {}).get("n", 0)
-
-    top_drogerias = _fetch_all("""
-        SELECT d.nombre, d.ciudad,
-               COUNT(DISTINCT h.id) AS recepciones,
-               l.estado AS lic_estado, l.vencimiento AS lic_vencimiento
-        FROM drogerias d
-        LEFT JOIN historial h ON h.drogeria_id = d.id
-        LEFT JOIN licencias l ON l.drogeria_id = d.id AND l.estado = 'activa'
-        GROUP BY d.id, d.nombre, d.ciudad, l.estado, l.vencimiento
-        ORDER BY recepciones DESC LIMIT 5
-    """)
-
-    if settings.usar_postgres:
-        por_vencer = _fetch_all("""
-            SELECT l.*, d.nombre AS drogeria_nombre
-            FROM licencias l JOIN drogerias d ON l.drogeria_id = d.id
-            WHERE l.estado = 'activa'
-            AND l.vencimiento::date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '15 days'
-            ORDER BY l.vencimiento
-        """)
-    else:
-        por_vencer = _fetch_all("""
-            SELECT l.*, d.nombre AS drogeria_nombre
-            FROM licencias l JOIN drogerias d ON l.drogeria_id = d.id
-            WHERE l.estado = 'activa'
-            AND l.vencimiento BETWEEN date('now') AND date('now', '+15 days')
-            ORDER BY l.vencimiento
-        """)
-
-    return {
-        "total_drogerias":      total_drogerias,
-        "licencias_activas":    licencias_activas,
-        "total_usuarios":       total_usuarios,
-        "total_recepciones":    total_recepciones,
-        "top_drogerias":        top_drogerias,
-        "licencias_por_vencer": por_vencer,
-    }
