@@ -125,16 +125,18 @@ def inicializar():
         # ── drogerias ─────────────────────────────────────────
         cur.execute(f"""
             CREATE TABLE IF NOT EXISTS drogerias (
-                id        {text_pk},
-                nombre    TEXT NOT NULL,
-                nit       TEXT UNIQUE,
-                ciudad    TEXT DEFAULT '',
-                direccion TEXT DEFAULT '',
-                telefono  TEXT DEFAULT '',
-                email     TEXT DEFAULT '',
-                logo_url  TEXT DEFAULT '',
-                activa    {bool_type},
-                creada_en {date_now}
+                id              {text_pk},
+                nombre          TEXT NOT NULL,
+                nit             TEXT UNIQUE,
+                ciudad          TEXT DEFAULT '',
+                direccion       TEXT DEFAULT '',
+                telefono        TEXT DEFAULT '',
+                email           TEXT DEFAULT '',
+                logo_url        TEXT DEFAULT '',
+                activa          {bool_type},
+                creada_en       {date_now},
+                creada_por_id   INTEGER DEFAULT NULL,
+                creada_por_rol  TEXT DEFAULT ''
             )
         """)
 
@@ -241,6 +243,18 @@ def inicializar():
             pass
 
         con.commit()
+
+        # ── Migración: columnas nuevas en drogerias ────────────
+        for col, definition in [
+            ("creada_por_id",  "INTEGER DEFAULT NULL"),
+            ("creada_por_rol", "TEXT DEFAULT ''"),
+        ]:
+            try:
+                cur.execute(f"ALTER TABLE drogerias ADD COLUMN {col} {definition}")
+                con.commit()
+                print(f"✅ Columna drogerias.{col} añadida (migración)")
+            except Exception:
+                pass  # Ya existe — ignorar
 
         # ── Superadmin por defecto ─────────────────────────────
         cur.execute("SELECT id FROM usuarios WHERE rol='superadmin' LIMIT 1")
@@ -451,11 +465,12 @@ def cambiar_password(uid: int, nueva: str):
 # ══════════════════════════════════════════════════════════════
 
 def crear_drogeria(nombre: str, nit: str = "", ciudad: str = "",
-                   direccion: str = "", telefono: str = "", email: str = "") -> int:
+                   direccion: str = "", telefono: str = "", email: str = "",
+                   creada_por_id: int = None, creada_por_rol: str = "") -> int:
     return _execute("""
-        INSERT INTO drogerias (nombre, nit, ciudad, direccion, telefono, email)
-        VALUES (?,?,?,?,?,?)
-    """, (nombre, nit, ciudad, direccion, telefono, email))
+        INSERT INTO drogerias (nombre, nit, ciudad, direccion, telefono, email, creada_por_id, creada_por_rol)
+        VALUES (?,?,?,?,?,?,?,?)
+    """, (nombre, nit, ciudad, direccion, telefono, email, creada_por_id, creada_por_rol))
 
 
 def get_drogeria(did: int) -> Optional[dict]:
