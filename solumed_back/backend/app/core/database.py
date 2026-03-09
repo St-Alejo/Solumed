@@ -25,10 +25,10 @@ from app.core.config import settings
 #  CONEXIÓN — PostgreSQL / Supabase
 # ══════════════════════════════════════════════════════════════
 
-def get_conn():
+def get_conn(autocommit: bool = False):
     """Abre y retorna una conexión a PostgreSQL/Supabase."""
     con = psycopg2.connect(settings.DATABASE_URL)
-    con.autocommit = False
+    con.autocommit = autocommit
     return con
 
 
@@ -144,9 +144,10 @@ def _executemany(sql: str, params_list: list[tuple]):
 def inicializar():
     """
     Crea las tablas si no existen en PostgreSQL/Supabase.
-    También aplica migraciones automáticas de columnas nuevas.
+    Usa autocommit=True para que cada sentencia DDL sea independiente:
+    un índice ya existente o un ALTER TABLE duplicado no abortan el resto.
     """
-    con = get_conn()
+    con = get_conn(autocommit=True)
     cur = con.cursor()
     try:
         # ── drogerias ─────────────────────────────────────────
@@ -258,23 +259,21 @@ def inicializar():
             )
         """)
 
-        # ── Índices ───────────────────────────────────────────
+        # ── Índices (autocommit: cada uno es independiente) ───
         for idx_sql in [
-            "CREATE INDEX IF NOT EXISTS idx_usr_email    ON usuarios(email)",
-            "CREATE INDEX IF NOT EXISTS idx_usr_drog     ON usuarios(drogeria_id)",
-            "CREATE INDEX IF NOT EXISTS idx_hist_drog    ON historial(drogeria_id)",
-            "CREATE INDEX IF NOT EXISTS idx_hist_fecha   ON historial(fecha_proceso)",
-            "CREATE INDEX IF NOT EXISTS idx_hist_fac     ON historial(factura_id)",
+            "CREATE INDEX IF NOT EXISTS idx_usr_email       ON usuarios(email)",
+            "CREATE INDEX IF NOT EXISTS idx_usr_drog        ON usuarios(drogeria_id)",
+            "CREATE INDEX IF NOT EXISTS idx_hist_drog       ON historial(drogeria_id)",
+            "CREATE INDEX IF NOT EXISTS idx_hist_fecha      ON historial(fecha_proceso)",
+            "CREATE INDEX IF NOT EXISTS idx_hist_fac        ON historial(factura_id)",
             "CREATE INDEX IF NOT EXISTS idx_cond_drog_fecha ON condiciones_ambientales(drogeria_id, fecha)",
-            "CREATE INDEX IF NOT EXISTS idx_ses_jti      ON sesiones(token_jti)",
-            "CREATE INDEX IF NOT EXISTS idx_ses_usuario  ON sesiones(usuario_id)",
+            "CREATE INDEX IF NOT EXISTS idx_ses_jti         ON sesiones(token_jti)",
+            "CREATE INDEX IF NOT EXISTS idx_ses_usuario     ON sesiones(usuario_id)",
         ]:
             try:
                 cur.execute(idx_sql)
             except Exception:
-                pass
-
-        con.commit()
+                pass  # Ya existe — autocommit garantiza que no afecta las demás
 
         # ── Migración: columnas nuevas en drogerias ────────────
         for col, definition in [
@@ -283,7 +282,6 @@ def inicializar():
         ]:
             try:
                 cur.execute(f"ALTER TABLE drogerias ADD COLUMN {col} {definition}")
-                con.commit()
                 print(f"✅ Columna drogerias.{col} añadida (migración)")
             except Exception:
                 pass  # Ya existe — ignorar
@@ -297,7 +295,6 @@ def inicializar():
                 "VALUES (%s,%s,%s,'superadmin',NULL)",
                 ("admin@solumed.co", "Administrador SoluMed", pw)
             )
-            con.commit()
             print("✅ Superadmin creado → admin@solumed.co | Admin2026!")
 
     finally:
@@ -305,6 +302,7 @@ def inicializar():
         con.close()
 
     print("✅ BD lista (PostgreSQL/Supabase)")
+
 
 
 # ══════════════════════════════════════════════════════════════
