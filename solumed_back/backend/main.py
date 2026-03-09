@@ -53,7 +53,7 @@ Los datos de historial y reportes son visibles **únicamente** para los usuarios
 # ── CORS ──────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.cors_origins_final,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -130,7 +130,7 @@ async def on_startup():
         except Exception as e:
             print(f"[WARN] Storage: {e}")
 
-    modo_bd      = "PostgreSQL/Supabase" if settings.usar_postgres else "SQLite local"
+    modo_bd      = "PostgreSQL/Supabase"
     modo_storage = "Supabase Storage" if settings.usar_supabase_storage else "Disco local"
 
     print(f"\n{'='*50}")
