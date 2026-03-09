@@ -297,3 +297,76 @@ class CondicionAmbientalBase(BaseModel):
 
 class CondicionAmbientalCreate(CondicionAmbientalBase):
     pass
+
+
+# ══════════════════════════════════════════════════════
+#  ALARMAS / RECORDATORIOS
+# ══════════════════════════════════════════════════════
+
+class AlarmaCreate(BaseModel):
+    nombre:           str = Field(..., min_length=2, max_length=200)
+    descripcion:      str = ""
+    fecha_inicio:     str = ""
+    fecha_fin:        str
+    dias_anticipacion: int = Field(30, ge=1, le=365)
+
+    @field_validator("nombre", mode="before")
+    @classmethod
+    def nombre_valido(cls, v: str) -> str:
+        v = str(v).strip()
+        if len(v) < 2:
+            raise ValueError("El nombre del recordatorio debe tener al menos 2 caracteres")
+        return v
+
+    @field_validator("fecha_fin", mode="before")
+    @classmethod
+    def fecha_fin_valida(cls, v: str) -> str:
+        v = str(v or "").strip()
+        if not v:
+            raise ValueError("La fecha de vencimiento es obligatoria")
+        try:
+            date.fromisoformat(v)
+        except ValueError:
+            raise ValueError(f"Fecha de vencimiento inválida: '{v}'. Usa el formato YYYY-MM-DD")
+        return v
+
+    @field_validator("fecha_inicio", mode="before")
+    @classmethod
+    def fecha_inicio_valida(cls, v: str) -> str:
+        v = str(v or "").strip()
+        if v:
+            try:
+                date.fromisoformat(v)
+            except ValueError:
+                raise ValueError(f"Fecha de inicio inválida: '{v}'. Usa el formato YYYY-MM-DD")
+        return v
+
+
+class AlarmaUpdate(BaseModel):
+    nombre:           Optional[str] = None
+    descripcion:      Optional[str] = None
+    fecha_inicio:     Optional[str] = None
+    fecha_fin:        Optional[str] = None
+    dias_anticipacion: Optional[int] = Field(None, ge=1, le=365)
+    estado:           Optional[str] = Field(None, pattern="^(activa|completada|cancelada)$")
+
+    @field_validator("nombre", mode="before")
+    @classmethod
+    def nombre_update(cls, v) -> Optional[str]:
+        if v is None:
+            return None
+        v = str(v).strip()
+        if len(v) < 2:
+            raise ValueError("El nombre debe tener al menos 2 caracteres")
+        return v
+
+    @field_validator("fecha_fin", "fecha_inicio", mode="before")
+    @classmethod
+    def fecha_update(cls, v) -> Optional[str]:
+        if v is None or v == "":
+            return v if v is None else ""
+        try:
+            date.fromisoformat(str(v))
+        except ValueError:
+            raise ValueError("Formato de fecha inválido. Usa YYYY-MM-DD")
+        return str(v)

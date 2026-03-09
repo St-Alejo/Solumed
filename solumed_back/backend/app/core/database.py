@@ -10,6 +10,7 @@ TABLAS:
   historial             → recepciones técnicas, aisladas por drogeria_id
   condiciones_ambientales → registros de temperatura/humedad diarios
   sesiones              → control de dispositivos activos por usuario
+  alarmas               → recordatorios y vencimientos por droguería
 """
 
 from datetime import date, datetime
@@ -259,6 +260,22 @@ def inicializar():
             )
         """)
 
+        # ── alarmas ───────────────────────────────────────────
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS alarmas (
+                id                SERIAL PRIMARY KEY,
+                drogeria_id       INTEGER NOT NULL REFERENCES drogerias(id),
+                usuario_id        INTEGER REFERENCES usuarios(id),
+                nombre            TEXT NOT NULL,
+                descripcion       TEXT DEFAULT '',
+                fecha_inicio      TEXT DEFAULT '',
+                fecha_fin         TEXT NOT NULL,
+                dias_anticipacion INTEGER DEFAULT 30,
+                estado            TEXT DEFAULT 'activa',
+                creada_en         TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
         # ── Índices (autocommit: cada uno es independiente) ───
         for idx_sql in [
             "CREATE INDEX IF NOT EXISTS idx_usr_email       ON usuarios(email)",
@@ -269,6 +286,8 @@ def inicializar():
             "CREATE INDEX IF NOT EXISTS idx_cond_drog_fecha ON condiciones_ambientales(drogeria_id, fecha)",
             "CREATE INDEX IF NOT EXISTS idx_ses_jti         ON sesiones(token_jti)",
             "CREATE INDEX IF NOT EXISTS idx_ses_usuario     ON sesiones(usuario_id)",
+            "CREATE INDEX IF NOT EXISTS idx_alarmas_drog    ON alarmas(drogeria_id)",
+            "CREATE INDEX IF NOT EXISTS idx_alarmas_estado  ON alarmas(estado)",
         ]:
             try:
                 cur.execute(idx_sql)
@@ -792,3 +811,66 @@ def dashboard_global() -> dict:
         "top_drogerias":        top_drogerias,
         "licencias_por_vencer": por_vencer,
     }
+
+
+# ══════════════════════════════════════════════════════════════
+#  ALARMAS / RECORDATORIOS
+# ══════════════════════════════════════════════════════════════
+
+def crear_alarma(
+    drogeria_id: int, usuario_id: int,
+    nombre: str, fecha_fin: str,
+    descripcion: str = "", fecha_inicio: str = "",
+    dias_anticipacion: int = 30
+) -> int:
+    return _execute(
+        "INSERT INTO alarmas "
+        "(drogeria_id, usuario_id, nombre, descripcion, fecha_inicio, fecha_fin, dias_anticipacion, estado) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,'activa')",
+        (drogeria_id, usuario_id, nombre, descripcion, fecha_inicio, fecha_fin, dias_anticipacion)
+    )
+
+
+def listar_alarmas(drogeria_id: int) -> list[dict]:
+    return _fetch_all(
+        "SELECT * FROM alarmas WHERE drogeria_id=%s ORDER BY fecha_fin ASC, id DESC",
+        (drogeria_id,)
+    )
+
+
+def get_alarma(alarma_id: int, drogeria_id: int) -> Optional[dict]:
+    return _fetch_one(
+        "SELECT * FROM alarmas WHERE id=%s AND drogeria_id=%s",
+        (alarma_id, drogeria_id)
+    )
+
+
+def actualizar_alarma(alarma_id: int, drogeria_id: int, **campos):
+    if not campos:
+        return
+    sets = ", ".join(f"{k}=%s" for k in campos)
+    _execute(
+        f"UPDATE alarmas SET {sets} WHERE id=%s AND drogeria_id=%s",
+        tuple(campos.values()) + (alarma_id, drogeria_id)
+    )
+
+
+def eliminar_alarma(alarma_id: int, drogeria_id: int):
+    _execute(
+        "DELETE FROM alarmas WHERE id=%s AND drogeria_id=%s",
+        (alarma_id, drogeria_id)
+    )
+
+
+def contar_alarmas_urgentes(drogeria_id: int) -> int:
+    """Cuenta alarmas activas cuya fecha de alerta ya llegó (fecha_fin - dias_anticipacion <= hoy)."""
+    row = _fetch_one(
+        """
+        SELECT COUNT(*) AS n FROM alarmas
+        WHERE drogeria_id = %s
+          AND estado = 'activa'
+          AND (fecha_fin::date - dias_anticipacion * INTERVAL '1 day')::date <= CURRENT_DATE
+        """,
+        (drogeria_id,)
+    )
+    return row["n"] if row else 0

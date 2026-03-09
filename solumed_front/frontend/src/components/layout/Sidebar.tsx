@@ -7,7 +7,7 @@ import {
   FlaskConical, ClipboardCheck, History, Search,
   FileText, Users, LogOut, ChevronRight, X, Menu,
   Building2, Key, AlertTriangle, Sun, Moon,
-  Thermometer
+  Thermometer, Bell
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { diasHasta } from "@/lib/utils";
@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/recepcion", label: "Recepción", icon: ClipboardCheck, desc: "Procesar facturas OCR" },
   { href: "/historial", label: "Historial", icon: History, desc: "Recepciones anteriores" },
   { href: "/condiciones", label: "Control Ambiental", icon: Thermometer, desc: "Temperatura y Humedad" },
+  { href: "/alarmas", label: "Alarmas", icon: Bell, desc: "Recordatorios y vencimientos" },
   { href: "/invima", label: "INVIMA", icon: Search, desc: "Consultar catálogo" },
   { href: "/reportes", label: "Reportes", icon: FileText, desc: "PDFs generados" },
   { href: "/usuarios", label: "Usuarios", icon: Users, desc: "Gestionar equipo" },
@@ -30,6 +31,7 @@ export default function Sidebar() {
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
   const [faltaRegistro, setFaltaRegistro] = useState(false);
+  const [alarmasUrgentes, setAlarmasUrgentes] = useState(0);
 
   // Consultar alerta de condiciones hoy
   useEffect(() => {
@@ -41,6 +43,18 @@ export default function Sidebar() {
       } catch (e) { }
     };
     revisar();
+  }, [usuario, pathname]);
+
+  // Consultar alarmas urgentes
+  useEffect(() => {
+    if (!usuario || usuario.rol === "superadmin") return;
+    const revisarAlarmas = async () => {
+      try {
+        const data = await api.alarmas.urgentes();
+        if (data.ok) setAlarmasUrgentes(data.urgentes ?? 0);
+      } catch (e) { }
+    };
+    revisarAlarmas();
   }, [usuario, pathname]);
 
   // Cerrar al navegar
@@ -145,6 +159,16 @@ export default function Sidebar() {
                   </div>
                   {item.href === "/condiciones" && faltaRegistro && (
                     <div style={{ width: 8, height: 8, borderRadius: 4, background: "#ef4444", flexShrink: 0 }} />
+                  )}
+                  {item.href === "/alarmas" && alarmasUrgentes > 0 && (
+                    <div style={{
+                      minWidth: 18, height: 18, borderRadius: 9, background: "#ef4444",
+                      color: "#fff", fontSize: 10, fontWeight: 700, flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      padding: "0 4px",
+                    }}>
+                      {alarmasUrgentes > 99 ? "99+" : alarmasUrgentes}
+                    </div>
                   )}
                 </div>
                 {active && <ChevronRight size={13} color="#3b82f6" style={{ flexShrink: 0 }} />}

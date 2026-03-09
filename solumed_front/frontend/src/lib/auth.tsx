@@ -289,6 +289,15 @@ export function useApi() {
         body: JSON.stringify(payload),
       }),
     },
+
+    alarmas: {
+      listar: () => apiFetch("/api/alarmas"),
+      crear: (data: any) => apiFetch("/api/alarmas", { method: "POST", body: JSON.stringify(data) }),
+      actualizar: (id: number, data: any) =>
+        apiFetch(`/api/alarmas/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+      eliminar: (id: number) => apiFetch(`/api/alarmas/${id}`, { method: "DELETE" }),
+      urgentes: () => apiFetch("/api/alarmas/urgentes"),
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [apiFetch, apiForm, token]); // token solo para descargarUrl que lo usa directamente
 }
