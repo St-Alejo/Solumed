@@ -44,15 +44,30 @@ class Settings(BaseSettings):
         "https://solumed.vercel.app",
     ]
 
+    # Orígenes adicionales separados por coma (útil para configurar en Railway)
+    # Ejemplo: ALLOWED_ORIGINS=https://mi-app.vercel.app,https://otro-dominio.com
+    ALLOWED_ORIGINS: str = ""
+
     @property
     def cors_origins_final(self) -> list[str]:
-        """Garantiza siempre los orígenes esenciales aunque Railway no los tenga."""
+        """
+        Garantiza siempre los orígenes esenciales aunque Railway sobreescriba
+        CORS_ORIGINS. Agrega también cualquier origen en ALLOWED_ORIGINS.
+        """
         base = set(self.CORS_ORIGINS)
+        # Orígenes que SIEMPRE deben estar, sin importar variables de entorno
         base.update([
             "http://localhost:3000",
             "http://127.0.0.1:3000",
+            "http://localhost:3001",
             "https://solumed.vercel.app",
         ])
+        # Orígenes extra vía variable de entorno (coma-separados)
+        if self.ALLOWED_ORIGINS:
+            for origin in self.ALLOWED_ORIGINS.split(","):
+                origin = origin.strip()
+                if origin:
+                    base.add(origin)
         return list(base)
 
     @property

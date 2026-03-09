@@ -139,6 +139,9 @@ async def on_startup():
     print(f"  BD:      {modo_bd}")
     print(f"  Storage: {modo_storage}")
     print(f"  Docs:    http://localhost:8000/docs")
+    print(f"  CORS orígenes permitidos:")
+    for o in sorted(settings.cors_origins_final):
+        print(f"    → {o}")
     print(f"{'='*50}\n")
 
 
