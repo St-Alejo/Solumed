@@ -48,7 +48,7 @@ interface LogEntry {
 export default function ExtractorGmailPage() {
   const { token } = useAuth();
   const api = useApi();
-  const { showToast } = useToast();
+  const { toast } = useToast();
 
   // ── Estado: configuración Gmail ──
   const [configurado, setConfigurado] = useState(false);
@@ -130,7 +130,7 @@ export default function ExtractorGmailPage() {
   const handleGuardarConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!gmailUser || !gmailPassword) {
-      showToast("Completa el correo y la contraseña de aplicación", "error");
+      toast("error", "Completa el correo y la contraseña de aplicación");
       return;
     }
     setGuardandoConfig(true);
@@ -140,14 +140,14 @@ export default function ExtractorGmailPage() {
         gmail_password: gmailPassword,
       });
       if (data.ok) {
-        showToast("Configuración guardada correctamente", "success");
+        toast("success", "Configuración guardada correctamente");
         setConfigurado(true);
         setGmailUserActual(gmailUser);
         setMostrarConfig(false);
         setGmailPassword(""); // Limpiar contraseña del estado
       }
     } catch (err: any) {
-      showToast(err.message ?? "Error guardando configuración", "error");
+      toast("error", err.message ?? "Error guardando configuración");
     } finally {
       setGuardandoConfig(false);
     }
@@ -157,20 +157,20 @@ export default function ExtractorGmailPage() {
 
   const handleExtraer = async () => {
     if (!configurado) {
-      showToast("Primero configura las credenciales Gmail", "error");
+      toast("error", "Primero configura las credenciales Gmail");
       setMostrarConfig(true);
       return;
     }
     if (!proveedor.trim()) {
-      showToast("Escribe el nombre del proveedor", "error");
+      toast("error", "Escribe el nombre del proveedor");
       return;
     }
     if (!fechaDesde || !fechaHasta) {
-      showToast("Selecciona el rango de fechas", "error");
+      toast("error", "Selecciona el rango de fechas");
       return;
     }
     if (fechaDesde > fechaHasta) {
-      showToast("La fecha inicio no puede ser mayor que la fecha fin", "error");
+      toast("error", "La fecha inicio no puede ser mayor que la fecha fin");
       return;
     }
 
@@ -246,7 +246,7 @@ export default function ExtractorGmailPage() {
       const data = await api.extractorGmail.historial();
       if (data.ok) setHistorial(data.datos ?? []);
     } catch (err: any) {
-      showToast(err.message ?? "Error cargando historial", "error");
+      toast("error", err.message ?? "Error cargando historial");
     } finally {
       setCargandoHistorial(false);
     }
@@ -277,7 +277,7 @@ export default function ExtractorGmailPage() {
         a.click();
         URL.revokeObjectURL(a.href);
       })
-      .catch(() => showToast("Error al descargar el PDF", "error"));
+      .catch(() => toast("error", "Error al descargar el PDF"));
   };
 
   // ── Descargar todos en ZIP ───────────────────────────────────────────
@@ -296,7 +296,7 @@ export default function ExtractorGmailPage() {
         a.click();
         URL.revokeObjectURL(a.href);
       })
-      .catch(() => showToast("Error al descargar el ZIP", "error"));
+      .catch(() => toast("error", "Error al descargar el ZIP"));
   };
 
   // ── Render ────────────────────────────────────────────────────────────
@@ -566,7 +566,7 @@ export default function ExtractorGmailPage() {
               <div key={i} style={{
                 color: log.tipo === "error" ? "#f87171"
                   : log.tipo === "fin" ? "#34d399"
-                  : "#94a3b8",
+                    : "#94a3b8",
                 display: "flex", alignItems: "flex-start", gap: 8,
               }}>
                 <span style={{ color: "#334155", flexShrink: 0, userSelect: "none" }}>
