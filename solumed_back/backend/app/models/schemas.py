@@ -498,3 +498,58 @@ class PagoCreditoCreate(BaseModel):
             return val
         except (ValueError, TypeError):
             raise ValueError("El monto del pago debe ser mayor a cero")
+
+
+# ══════════════════════════════════════════════════════
+#  EXTRACTOR GMAIL
+# ══════════════════════════════════════════════════════
+
+class ExtractorGmailConfigCreate(BaseModel):
+    """Credenciales para acceder al correo Gmail via IMAP."""
+    gmail_user:     str = Field(..., min_length=5, max_length=200)
+    gmail_password: str = Field(..., min_length=4, max_length=500)
+
+    @field_validator("gmail_user", mode="before")
+    @classmethod
+    def usuario_valido(cls, v: str) -> str:
+        v = str(v).strip()
+        if not v:
+            raise ValueError("El correo Gmail es obligatorio")
+        if "@" not in v:
+            raise ValueError("El correo Gmail no tiene un formato válido")
+        return v
+
+    @field_validator("gmail_password", mode="before")
+    @classmethod
+    def password_valido(cls, v: str) -> str:
+        v = str(v).strip()
+        if not v:
+            raise ValueError("La contraseña de aplicación es obligatoria")
+        return v
+
+
+class ExtractorGmailExtraerRequest(BaseModel):
+    """Parámetros para ejecutar una extracción de facturas desde Gmail."""
+    proveedor:   str = Field(..., min_length=2, max_length=200)
+    fecha_desde: str
+    fecha_hasta: str
+
+    @field_validator("proveedor", mode="before")
+    @classmethod
+    def proveedor_valido(cls, v: str) -> str:
+        v = str(v).strip()
+        if len(v) < 2:
+            raise ValueError("El nombre del proveedor debe tener al menos 2 caracteres")
+        return v
+
+    @field_validator("fecha_desde", "fecha_hasta", mode="before")
+    @classmethod
+    def fechas_validas(cls, v: str) -> str:
+        v = str(v or "").strip()
+        if not v:
+            raise ValueError("Las fechas de búsqueda son obligatorias")
+        try:
+            date.fromisoformat(v)
+        except ValueError:
+            raise ValueError(f"Fecha inválida '{v}'. Usa el formato YYYY-MM-DD")
+        return v

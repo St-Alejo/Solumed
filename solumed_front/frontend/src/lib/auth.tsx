@@ -299,6 +299,26 @@ export function useApi() {
       urgentes: () => apiFetch("/api/alarmas/urgentes"),
     },
 
+    extractorGmail: {
+      obtenerConfig: () =>
+        apiFetch("/api/extractor-gmail/configuracion"),
+      guardarConfig: (data: { gmail_user: string; gmail_password: string }) =>
+        apiFetch("/api/extractor-gmail/configuracion", {
+          method: "POST",
+          body: JSON.stringify(data),
+        }),
+      listarPdfs: () =>
+        apiFetch("/api/extractor-gmail/pdfs"),
+      historial: () =>
+        apiFetch("/api/extractor-gmail/historial"),
+      // La extracción se hace con fetch directo para leer el stream SSE
+      extraerUrl: () => `${API}/api/extractor-gmail/extraer`,
+      descargarUrl: (nombre: string) =>
+        `${API}/api/extractor-gmail/descargar/${encodeURIComponent(nombre)}`,
+      descargarTodosUrl: () =>
+        `${API}/api/extractor-gmail/descargar-todos`,
+    },
+
     credito: {
       resumen: () => apiFetch("/api/credito/resumen"),
       listar: () => apiFetch("/api/credito"),

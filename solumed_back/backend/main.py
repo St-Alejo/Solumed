@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from app.core.config import settings
 from app.core.database import inicializar
 
-from app.routers import auth, admin, facturas, invima, historial, usuarios, condiciones, distribuidores, alarmas, credito
+from app.routers import auth, admin, facturas, invima, historial, usuarios, condiciones, distribuidores, alarmas, credito, extractor_gmail
 
 # ── Aplicación FastAPI ────────────────────────────────────────
 app = FastAPI(
@@ -116,7 +116,8 @@ app.include_router(historial.router,     prefix="/api/historial",     tags=["�
 app.include_router(usuarios.router,      prefix="/api/usuarios",      tags=["👥 Usuarios"])
 app.include_router(condiciones.router,   prefix="/api/condiciones",   tags=["🌡️ Condiciones"])
 app.include_router(alarmas.router,       prefix="/api/alarmas",       tags=["🔔 Alarmas"])
-app.include_router(credito.router,       prefix="/api/credito",       tags=["💳 Crédito"])
+app.include_router(credito.router,         prefix="/api/credito",         tags=["💳 Crédito"])
+app.include_router(extractor_gmail.router, prefix="/api/extractor-gmail", tags=["📧 Extractor Gmail"])
 
 
 # ── Eventos ───────────────────────────────────────────────────

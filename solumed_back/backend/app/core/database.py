@@ -319,6 +319,30 @@ def inicializar():
             )
         """)
 
+        # ── extractor_gmail_config ────────────────────────────
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS extractor_gmail_config (
+                id              SERIAL PRIMARY KEY,
+                drogeria_id     INTEGER NOT NULL REFERENCES drogerias(id) UNIQUE,
+                gmail_user      TEXT NOT NULL,
+                gmail_password  TEXT NOT NULL,
+                created_at      TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
+        # ── extractor_gmail_historial ─────────────────────────
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS extractor_gmail_historial (
+                id               SERIAL PRIMARY KEY,
+                drogeria_id      INTEGER NOT NULL REFERENCES drogerias(id),
+                nombre_archivo   TEXT NOT NULL,
+                proveedor        TEXT DEFAULT '',
+                fecha_correo     TEXT DEFAULT '',
+                fecha_extraccion TEXT DEFAULT '',
+                created_at       TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
         # ── Índices (autocommit: cada uno es independiente) ───
         for idx_sql in [
             "CREATE INDEX IF NOT EXISTS idx_usr_email       ON usuarios(email)",
@@ -334,6 +358,7 @@ def inicializar():
             "CREATE INDEX IF NOT EXISTS idx_faccred_drog    ON facturas_credito(drogeria_id)",
             "CREATE INDEX IF NOT EXISTS idx_faccred_estado  ON facturas_credito(estado)",
             "CREATE INDEX IF NOT EXISTS idx_pagcred_fac     ON pagos_credito(factura_id)",
+            "CREATE INDEX IF NOT EXISTS idx_extgmail_drog   ON extractor_gmail_historial(drogeria_id)",
         ]:
             try:
                 cur.execute(idx_sql)
@@ -1032,4 +1057,61 @@ def eliminar_pago_credito(pago_id: int, drogeria_id: int):
     _execute(
         "DELETE FROM pagos_credito WHERE id=%s AND drogeria_id=%s",
         (pago_id, drogeria_id)
+    )
+
+
+# ══════════════════════════════════════════════════════════════
+#  EXTRACTOR GMAIL
+# ══════════════════════════════════════════════════════════════
+
+def get_extractor_gmail_config(drogeria_id: int) -> Optional[dict]:
+    """Obtiene la configuración Gmail (usuario y contraseña) de la droguería."""
+    return _fetch_one(
+        "SELECT * FROM extractor_gmail_config WHERE drogeria_id=%s",
+        (drogeria_id,)
+    )
+
+
+def guardar_extractor_gmail_config(
+    drogeria_id: int,
+    gmail_user: str,
+    gmail_password: str,
+):
+    """
+    Guarda o actualiza las credenciales Gmail para la droguería.
+    Usa UPSERT para no duplicar registros si ya existe una configuración.
+    """
+    _execute("""
+        INSERT INTO extractor_gmail_config (drogeria_id, gmail_user, gmail_password)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (drogeria_id)
+        DO UPDATE SET
+            gmail_user     = EXCLUDED.gmail_user,
+            gmail_password = EXCLUDED.gmail_password,
+            created_at     = NOW()
+    """, (drogeria_id, gmail_user, gmail_password))
+
+
+def guardar_extractor_gmail_historial(
+    drogeria_id: int,
+    nombre_archivo: str,
+    proveedor: str,
+    fecha_correo: str,
+) -> int:
+    """Registra en el historial un PDF extraído desde Gmail."""
+    fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+    return _execute(
+        "INSERT INTO extractor_gmail_historial "
+        "(drogeria_id, nombre_archivo, proveedor, fecha_correo, fecha_extraccion) "
+        "VALUES (%s, %s, %s, %s, %s)",
+        (drogeria_id, nombre_archivo, proveedor, fecha_correo, fecha_hoy)
+    )
+
+
+def listar_extractor_gmail_historial(drogeria_id: int) -> list[dict]:
+    """Devuelve el historial de extracciones de la droguería, más recientes primero."""
+    return _fetch_all(
+        "SELECT * FROM extractor_gmail_historial WHERE drogeria_id=%s "
+        "ORDER BY created_at DESC LIMIT 500",
+        (drogeria_id,)
     )

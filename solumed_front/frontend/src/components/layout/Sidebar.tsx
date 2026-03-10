@@ -7,7 +7,7 @@ import {
   FlaskConical, ClipboardCheck, History, Search,
   FileText, Users, LogOut, ChevronRight, X, Menu,
   Building2, Key, AlertTriangle, Sun, Moon,
-  Thermometer, Bell, CreditCard
+  Thermometer, Bell, CreditCard, Mail
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { diasHasta } from "@/lib/utils";
@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { href: "/invima", label: "INVIMA", icon: Search, desc: "Consultar catálogo" },
   { href: "/reportes", label: "Reportes", icon: FileText, desc: "PDFs generados" },
   { href: "/usuarios", label: "Usuarios", icon: Users, desc: "Gestionar equipo" },
+  { href: "/extractor-gmail", label: "Extractor Gmail", icon: Mail, desc: "Facturas desde correo" },
   { href: "/perfil", label: "Mi Cuenta", icon: Key, desc: "Contraseña y perfil" },
 ];
 
