@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Sidebar from "@/components/layout/Sidebar";
 import { ToastProvider } from "@/components/ui/Toast";
+import ChatbotFloating from "@/components/ChatbotFloating";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { usuario, loading } = useAuth();
@@ -33,6 +34,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      {/* Chatbot IA flotante — visible en todas las páginas autenticadas */}
+      <ChatbotFloating />
     </ToastProvider>
   );
 }

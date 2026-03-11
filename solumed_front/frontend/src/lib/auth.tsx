@@ -299,6 +299,21 @@ export function useApi() {
       urgentes: () => apiFetch("/api/alarmas/urgentes"),
     },
 
+    chatbot: {
+      // Historial de la sesión (llamada REST normal, no SSE)
+      historial: (sessionId: string) =>
+        apiFetch(`/api/chatbot/historial/${encodeURIComponent(sessionId)}`),
+      // Valorar un mensaje del asistente (1=útil, -1=no útil)
+      valorar: (mensajeId: number, valoracion: 1 | -1) =>
+        apiFetch("/api/chatbot/valoracion", {
+          method: "POST",
+          body: JSON.stringify({ mensaje_id: mensajeId, valoracion }),
+        }),
+      // URL del endpoint SSE (se usa con fetch directo en useChatbot.ts,
+      // no con apiFetch, para evitar que el proxy de Next.js bufferee el stream)
+      mensajeUrl: () => `${API}/api/chatbot/mensaje`,
+    },
+
     extractorGmail: {
       obtenerConfig: () =>
         apiFetch("/api/extractor-gmail/configuracion"),

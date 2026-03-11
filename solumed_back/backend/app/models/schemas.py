@@ -528,6 +528,45 @@ class ExtractorGmailConfigCreate(BaseModel):
         return v
 
 
+# ══════════════════════════════════════════════════════
+#  CHATBOT IA
+# ══════════════════════════════════════════════════════
+
+class MensajeHistorial(BaseModel):
+    """Un turno del historial de conversación enviado por el cliente."""
+    rol:     str   # 'usuario' o 'asistente'
+    mensaje: str
+
+
+class ChatbotMensajeRequest(BaseModel):
+    """Body de POST /api/chatbot/mensaje."""
+    mensaje:    str = Field(..., min_length=1, max_length=4000)
+    session_id: str = Field(..., min_length=1)
+    historial:  list[MensajeHistorial] = []
+
+    @field_validator("mensaje", mode="before")
+    @classmethod
+    def mensaje_no_vacio(cls, v: str) -> str:
+        v = str(v).strip()
+        if not v:
+            raise ValueError("El mensaje no puede estar vacío")
+        return v
+
+
+class ChatbotValoracionRequest(BaseModel):
+    """Body de POST /api/chatbot/valoracion."""
+    mensaje_id: int
+    valoracion: int = Field(..., ge=-1, le=1)
+
+    @field_validator("valoracion", mode="before")
+    @classmethod
+    def valoracion_valida(cls, v) -> int:
+        v = int(v)
+        if v not in (-1, 0, 1):
+            raise ValueError("La valoración debe ser -1, 0 o 1")
+        return v
+
+
 class ExtractorGmailExtraerRequest(BaseModel):
     """Parámetros para ejecutar una extracción de facturas desde Gmail."""
     proveedor:   str = Field(..., min_length=2, max_length=200)

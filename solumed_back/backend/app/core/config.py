@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     ALGORITHM:                   str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
 
+    # ── Anthropic Claude ───────────────────────────────────────
+    ANTHROPIC_API_KEY: str = ""
+
     # ── Socrata INVIMA ─────────────────────────────────────────
     SOCRATA_APP_TOKEN: str = ""
 

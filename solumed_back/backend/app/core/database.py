@@ -319,6 +319,31 @@ def inicializar():
             )
         """)
 
+        # ── chatbot_conversaciones ────────────────────────────
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS chatbot_conversaciones (
+                id          SERIAL PRIMARY KEY,
+                drogeria_id INTEGER REFERENCES drogerias(id),
+                usuario_id  INTEGER REFERENCES usuarios(id),
+                session_id  TEXT NOT NULL,
+                rol         TEXT NOT NULL,
+                mensaje     TEXT NOT NULL,
+                valoracion  INTEGER DEFAULT NULL,
+                created_at  TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
+        # ── chatbot_contexto_sistema ──────────────────────────
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS chatbot_contexto_sistema (
+                id          SERIAL PRIMARY KEY,
+                seccion     TEXT NOT NULL,
+                descripcion TEXT NOT NULL,
+                keywords    TEXT DEFAULT '',
+                updated_at  TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
         # ── extractor_gmail_config ────────────────────────────
         cur.execute("""
             CREATE TABLE IF NOT EXISTS extractor_gmail_config (
@@ -359,6 +384,8 @@ def inicializar():
             "CREATE INDEX IF NOT EXISTS idx_faccred_estado  ON facturas_credito(estado)",
             "CREATE INDEX IF NOT EXISTS idx_pagcred_fac     ON pagos_credito(factura_id)",
             "CREATE INDEX IF NOT EXISTS idx_extgmail_drog   ON extractor_gmail_historial(drogeria_id)",
+            "CREATE INDEX IF NOT EXISTS idx_chatbot_session  ON chatbot_conversaciones(session_id)",
+            "CREATE INDEX IF NOT EXISTS idx_chatbot_drog     ON chatbot_conversaciones(drogeria_id)",
         ]:
             try:
                 cur.execute(idx_sql)
@@ -1115,3 +1142,54 @@ def listar_extractor_gmail_historial(drogeria_id: int) -> list[dict]:
         "ORDER BY created_at DESC LIMIT 500",
         (drogeria_id,)
     )
+
+
+# ══════════════════════════════════════════════════════════════
+#  CHATBOT IA
+# ══════════════════════════════════════════════════════════════
+
+def guardar_mensaje_chatbot(
+    drogeria_id: Optional[int],
+    usuario_id: Optional[int],
+    session_id: str,
+    rol: str,
+    mensaje: str,
+) -> int:
+    """
+    Guarda un turno de conversación.
+    rol debe ser 'usuario' o 'asistente'.
+    Retorna el id del registro insertado (usado para valoraciones).
+    """
+    return _execute(
+        "INSERT INTO chatbot_conversaciones "
+        "(drogeria_id, usuario_id, session_id, rol, mensaje) "
+        "VALUES (%s, %s, %s, %s, %s)",
+        (drogeria_id, usuario_id, session_id, rol, mensaje),
+    )
+
+
+def actualizar_valoracion_chatbot(mensaje_id: int, valoracion: int):
+    """Guarda el thumbs up (1) o thumbs down (-1) de un mensaje del asistente."""
+    _execute(
+        "UPDATE chatbot_conversaciones SET valoracion=%s WHERE id=%s",
+        (valoracion, mensaje_id),
+    )
+
+
+def listar_conversacion_chatbot(
+    session_id: str,
+    drogeria_id: Optional[int],
+    limite: int = 20,
+) -> list[dict]:
+    """
+    Devuelve los últimos `limite` mensajes de la sesión en orden cronológico ascendente.
+    Filtra por drogeria_id para garantizar el aislamiento multi-tenant.
+    """
+    filas = _fetch_all(
+        "SELECT id, rol, mensaje, valoracion, created_at "
+        "FROM chatbot_conversaciones "
+        "WHERE session_id=%s AND (drogeria_id=%s OR drogeria_id IS NULL) "
+        "ORDER BY created_at DESC LIMIT %s",
+        (session_id, drogeria_id, limite),
+    )
+    return list(reversed(filas))  # Orden cronológico ascendente
