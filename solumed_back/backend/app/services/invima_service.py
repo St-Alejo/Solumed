@@ -50,7 +50,7 @@ def _normalizar_termino(termino: str) -> str:
 
 # Prefijos de registros sanitarios NO farmacéuticos (cosméticos, suplementos, fitoterapia)
 _RE_RS_NO_FARMA = re.compile(
-    r'^(NSOC|NSOCB|NCOS|NSON|ACON|SSD|RSAA|PREM|CASD|CASO)',
+    r'^(NSOC|NSOCB|NCOS|NSON|ACON|SSD|RSAA|PREM|CASD|CASO|NS\d)',
     re.IGNORECASE
 )
 
@@ -62,7 +62,29 @@ _RE_PRODUCTO_NO_FARMA = re.compile(
     r'|BOTANICA|NATURAL|HERBAL|FITOTERAPIA|POMADA\s+CHUCHUGUAZA'
     r'|CEBOLLA|AJO|JENGIBRE|MORINGA|SPIRULINA|ALOE|BIOTIN'
     r'|PROTEINA|PROBIOTICO|COLLAGEN|GEL\s+FACIAL|SERUM'
-    r'|HIDRATANTE|ANTIARRUGAS|BRONCEADOR|PROTECTOR\s+SOLAR)\b',
+    r'|HIDRATANTE|ANTIARRUGAS|BRONCEADOR|PROTECTOR\s+SOLAR'
+    # ── Cosméticos / maquillaje ──────────────────────────────────
+    r'|MAQUILLAJE|LABIAL|PINTALABIOS|LIPSTICK|LIP\s+GLOSS'
+    r'|CORRECTOR\s+DE|POLVO\s+COMPACTO|POLVO\s+SUELTO|RUBOR|COLORETE'
+    r'|ILUMINADOR|CONTORNO|SOMBRA\s+DE\s+OJOS?|DELINEADOR|MASCARA\s+DE'
+    r'|RIMMEL|RIMEL|BASE\s+DE\s+MAQUILLAJE|FOUNDATION|BB\s+CREAM|CC\s+CREAM'
+    r'|DESMAQUILLANTE|MICELLAR|AGUA\s+MICELAR|TONER\s+FACIAL'
+    # ── Desodorantes / antitranspirantes ────────────────────────
+    r'|DESODORANTE|ANTITRANSPIRANTE|DEOPROT|REXONA|DOVE\s+DEO|AXE\s+DEO'
+    r'|ROLL[\s\-]ON|SPRAY\s+CORPORAL|DEO\s+SPRAY|BODY\s+SPRAY'
+    # ── Perfumería ───────────────────────────────────────────────
+    r'|PERFUME|COLONIA|EAU\s+DE|FRAGANCIA|SPLASH'
+    # ── Cuidado capilar ──────────────────────────────────────────
+    r'|ACONDICIONADOR|TRATAMIENTO\s+CAPILAR|MASCARILLA\s+CAPILAR'
+    r'|TINTE\s+DE\s+CABELLO?|COLORACI[OÓ]N\s+CAPILAR|TINTURA\s+CABELLO?'
+    r'|LACA\s+PARA|GEL\s+PARA\s+CABELLO?|FIJADOR\s+CAPILAR'
+    # ── Higiene general (no farmacéutica) ───────────────────────
+    r'|TALCO\s+DESODORANTE|PA[ÑN]AL|TOALLA\s+FEMENINA|PROTECTOR\s+DIARIO'
+    r'|HISOPO|HISOPO\s+COPITOS|COPITO|ALGOD[OÓ]N\s+COSM'
+    r'|PAPEL\s+HIGI[EÉ]NICO|TOALLA\s+HUMEDA?|PA[ÑN]ITO'
+    # ── Suplementos / nutrición ──────────────────────────────────
+    r'|PROTEINA\s+EN\s+POLVO|WHEY|CREATINA|AMINOACIDO|BCAA'
+    r'|BARRA\s+PROTEICA|BEBIDA\s+ENERGIZANTE|SUERO\s+DEPORTIVO)\b',
     re.IGNORECASE
 )
 

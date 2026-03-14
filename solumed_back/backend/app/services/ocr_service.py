@@ -698,30 +698,44 @@ async def procesar_factura(
     prog(65, f"{len(productos_base)} productos — consultando INVIMA...")
 
     productos_finales = []
+    omitidos = []          # Para el log de progreso
     total = len(productos_base)
 
     for i, p in enumerate(productos_base):
         pct = 65 + int((i / max(total, 1)) * 30)
-        prog(pct, f"INVIMA {i+1}/{total}: {p.get('nombre_producto','')[:30]}...")
+        nombre_prod = p.get("nombre_producto", "")
+        prog(pct, f"INVIMA {i+1}/{total}: {nombre_prod[:30]}...")
 
+        rs = p.get("registro_sanitario_factura", "")
+        termino_busqueda = rs if rs else nombre_prod
+
+        # Sentinel: None = INVIMA respondió "no existe / no aplica"
+        #           dict  = encontrado
+        #           {}    = error de red (conservador: incluir igualmente)
         datos_invima = {}
+        invima_encontrado = False
         try:
-            rs = p.get("registro_sanitario_factura", "")
-            nombre = p.get("nombre_producto", "")
-            termino_busqueda = rs if rs else nombre
-            resultado = await buscar_invima(termino_busqueda)
-            datos_invima = resultado or {}
+            resultado = await buscar_invima(termino_busqueda, nombre_producto=nombre_prod)
+            if resultado is None:
+                # INVIMA confirmó que no hay registro → omitir producto
+                omitidos.append(nombre_prod)
+                prog(pct, f"Sin RS INVIMA — omitido: {nombre_prod[:40]}")
+                continue
+            datos_invima = resultado
+            invima_encontrado = True
         except Exception:
+            # Error de conexión: incluir el producto con datos vacíos
+            # (no silenciar productos por problemas de red)
             pass
 
         productos_finales.append({
             "codigo_producto":    p.get("codigo_producto", ""),
-            "nombre_producto":    p.get("nombre_producto", ""),
+            "nombre_producto":    nombre_prod,
             "lote":               p.get("lote", ""),
             "vencimiento":        p.get("vencimiento", ""),
             "cantidad":           int(p.get("cantidad", 1)),
             "num_muestras":       str(p.get("cantidad", "1")),
-            "registro_sanitario": datos_invima.get("registro_sanitario", p.get("registro_sanitario_factura", "")),
+            "registro_sanitario": datos_invima.get("registro_sanitario", rs),
             "estado_invima":      datos_invima.get("estado", ""),
             "laboratorio":        datos_invima.get("laboratorio", ""),
             "principio_activo":   datos_invima.get("principio_activo", ""),
@@ -736,9 +750,11 @@ async def procesar_factura(
             "presentacion":       "",
         })
 
-    prog(100, f"Listo — {len(productos_finales)} productos procesados")
+    omitidos_txt = f" ({len(omitidos)} sin RS omitidos)" if omitidos else ""
+    prog(100, f"Listo — {len(productos_finales)} productos cargados{omitidos_txt}")
     return {
-        "productos": productos_finales,
+        "productos":  productos_finales,
         "factura_id": f_id,
-        "proveedor": f_prov
+        "proveedor":  f_prov,
+        "omitidos":   omitidos,   # Lista de nombres omitidos (para mostrar en frontend si se quiere)
     }

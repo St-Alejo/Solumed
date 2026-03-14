@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
-import { CheckCircle2, XCircle, Info, X } from "lucide-react";
+import { CheckCircle2, XCircle, Info, AlertTriangle, X } from "lucide-react";
 import type { Toast, ToastType } from "@/types";
 
 interface ToastCtx { toast: (tipo: ToastType, texto: string) => void; }
@@ -12,11 +12,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const toast = useCallback((tipo: ToastType, texto: string) => {
     const id = Date.now();
     setToasts(p => [...p, { id, tipo, texto }]);
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4000);
+    const ms = tipo === "warning" ? 7000 : 4000;
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), ms);
   }, []);
 
-  const icons = { success: <CheckCircle2 size={16}/>, error: <XCircle size={16}/>, info: <Info size={16}/> };
-  const colors = { success: "var(--green)", error: "var(--red)", info: "var(--blue)" };
+  const icons = { success: <CheckCircle2 size={16}/>, error: <XCircle size={16}/>, info: <Info size={16}/>, warning: <AlertTriangle size={16}/> };
+  const colors = { success: "var(--green)", error: "var(--red)", info: "var(--blue)", warning: "#d97706" };
 
   return (
     <Ctx.Provider value={{ toast }}>

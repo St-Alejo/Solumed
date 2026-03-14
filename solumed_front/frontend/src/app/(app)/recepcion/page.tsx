@@ -92,6 +92,7 @@ export default function RecepcionPage() {
     try {
       const res = await api.facturas.procesar(item.archivo);
       clearInterval(timer);
+      const omitidos: string[] = res.omitidos || [];
       updateFactura(item.id, {
         estado: "listo",
         progreso: 100,
@@ -100,7 +101,16 @@ export default function RecepcionPage() {
         facturaId: res.factura_id || item.facturaId,
         proveedor: res.proveedor || item.proveedor,
       });
-      toast("success", `"${item.archivo.name}": ${res.total} productos detectados`);
+      if (omitidos.length > 0) {
+        toast("warning",
+          `${res.total} medicamentos cargados. ` +
+          `${omitidos.length} producto(s) sin registro INVIMA omitidos: ` +
+          omitidos.slice(0, 3).join(", ") +
+          (omitidos.length > 3 ? ` y ${omitidos.length - 3} más.` : ".")
+        );
+      } else {
+        toast("success", `"${item.archivo.name}": ${res.total} productos detectados`);
+      }
     } catch (e: any) {
       clearInterval(timer);
       updateFactura(item.id, { estado: "error", progreso: 0, error: e.message });

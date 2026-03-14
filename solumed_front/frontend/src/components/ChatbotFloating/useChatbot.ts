@@ -18,11 +18,13 @@ import { useToast } from "@/components/ui/Toast";
 // ── Tipos ─────────────────────────────────────────────────────────────────
 
 export interface MensajeChat {
-  id?: number;         // id en BD (solo mensajes del asistente guardados)
-  rol: "usuario" | "asistente";
+  id?: number;           // id en BD (solo mensajes del asistente guardados)
+  rol: "usuario" | "asistente" | "accion";
   contenido: string;
-  cargando?: boolean;  // true mientras se recibe el stream
-  buscando?: boolean;  // true cuando Claude activa web_search
+  cargando?: boolean;    // true mientras se recibe el stream
+  buscando?: boolean;    // true cuando Claude activa web_search
+  accionando?: boolean;  // true mientras la herramienta agéntica se ejecuta
+  herramienta?: string;  // nombre de la herramienta (para tracking de actualizaciones)
   valoracion?: number | null;
   timestamp: number;
 }
@@ -179,6 +181,34 @@ export function useChatbot(): EstadoChatbot {
               }));
             } else if (evento.tipo === "buscando") {
               actualizarBot(m => ({ ...m, buscando: true }));
+            } else if (evento.tipo === "accion") {
+              const herramienta = evento.herramienta as string;
+              const estado      = evento.estado as string;
+              if (estado === "iniciando") {
+                // Insertar burbuja de acción justo ANTES del placeholder del asistente
+                const msgAccion: MensajeChat = {
+                  rol:        "accion",
+                  contenido:  evento.mensaje ?? "Ejecutando acción...",
+                  herramienta,
+                  accionando: true,
+                  timestamp:  Date.now(),
+                };
+                setMensajes(prev => {
+                  const arr = [...prev];
+                  // El placeholder del asistente siempre es el último elemento
+                  arr.splice(arr.length - 1, 0, msgAccion);
+                  return arr;
+                });
+              } else if (estado === "completado") {
+                // Actualizar la burbuja de acción existente con el resultado
+                setMensajes(prev =>
+                  prev.map(m =>
+                    m.rol === "accion" && m.herramienta === herramienta
+                      ? { ...m, accionando: false, contenido: evento.mensaje ?? m.contenido }
+                      : m
+                  )
+                );
+              }
             } else if (evento.tipo === "fin") {
               // Quitar estado cargando y guardar el id del mensaje
               actualizarBot(m => ({

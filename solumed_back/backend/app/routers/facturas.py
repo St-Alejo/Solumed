@@ -59,20 +59,23 @@ async def procesar(
         resultado = await procesar_factura(str(ruta_temp))
         
         if isinstance(resultado, dict):
-            productos = resultado.get("productos", [])
+            productos  = resultado.get("productos", [])
             factura_id = resultado.get("factura_id", "")
-            proveedor = resultado.get("proveedor", "")
+            proveedor  = resultado.get("proveedor", "")
+            omitidos   = resultado.get("omitidos", [])
         else:
-            productos = resultado
+            productos  = resultado
             factura_id = ""
-            proveedor = ""
+            proveedor  = ""
+            omitidos   = []
 
         return {
-            "ok": True, 
-            "total": len(productos), 
+            "ok":        True,
+            "total":     len(productos),
             "productos": productos,
             "factura_id": factura_id,
-            "proveedor": proveedor
+            "proveedor": proveedor,
+            "omitidos":  omitidos,   # productos sin registro INVIMA que fueron filtrados
         }
     except Exception as e:
         raise HTTPException(500, f"Error procesando factura: {e}")

@@ -11,7 +11,7 @@
  *  - Botones de valoración thumbs up/down
  */
 
-import { Volume2, ThumbsUp, ThumbsDown, Globe } from "lucide-react";
+import { Volume2, ThumbsUp, ThumbsDown, Globe, Settings } from "lucide-react";
 import type { MensajeChat } from "./useChatbot";
 
 interface Props {
@@ -28,7 +28,60 @@ function formatHora(ts: number): string {
   });
 }
 
+// ── Burbuja especial para acciones agénticas ──────────────────────────────
+function BurbujaAccion({ mensaje }: { mensaje: MensajeChat }) {
+  const enCurso = mensaje.accionando;
+
+  return (
+    <div style={{
+      display:    "flex",
+      alignItems: "flex-start",
+      gap:        8,
+      maxWidth:   "100%",
+      margin:     "2px 0",
+    }}>
+      {/* Ícono de engranaje (animado si está en curso) */}
+      <div style={{
+        flexShrink:  0,
+        marginTop:   2,
+        animation:   enCurso ? "spin 1.5s linear infinite" : "none",
+        color:       enCurso ? "#60a5fa" : "#22c55e",
+        display:     "flex",
+      }}>
+        <Settings size={13} />
+      </div>
+
+      {/* Contenido de la acción */}
+      <div style={{
+        padding:      "7px 11px",
+        borderRadius: "10px",
+        background:   enCurso
+          ? "rgba(96,165,250,.07)"
+          : "rgba(34,197,94,.07)",
+        border:       `1px solid ${enCurso
+          ? "rgba(96,165,250,.2)"
+          : "rgba(34,197,94,.2)"}`,
+        fontSize:     12,
+        color:        enCurso
+          ? "rgba(96,165,250,.9)"
+          : "rgba(34,197,94,.9)",
+        fontStyle:    "italic",
+        lineHeight:   1.4,
+        maxWidth:     "85%",
+      }}>
+        {mensaje.contenido}
+      </div>
+    </div>
+  );
+}
+
+
 export default function ChatMessage({ mensaje, onValorar, onLeer }: Props) {
+  // Burbuja de acción agéntica (diferente al flujo normal)
+  if (mensaje.rol === "accion") {
+    return <BurbujaAccion mensaje={mensaje} />;
+  }
+
   const esUsuario = mensaje.rol === "usuario";
 
   return (

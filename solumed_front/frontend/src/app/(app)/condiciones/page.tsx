@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { useAuth, useApi } from "@/lib/auth";
-import { Calendar as CalendarIcon, Download, AlertTriangle, Save, Loader2, ThermometerSun } from "lucide-react";
+import { Download, AlertTriangle, Save, Loader2, ThermometerSun, X, FileSpreadsheet } from "lucide-react";
 import { format, addMonths, subMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import { useToast } from "@/components/ui/Toast";
@@ -19,6 +19,12 @@ type Condicion = {
     firma_pm: string;
 };
 
+// ── Nombres de mes en español para el selector ────────────────────────────
+const MESES = [
+    "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+    "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre",
+];
+
 export default function CondicionesPage() {
     const { usuario } = useAuth();
     const api = useApi();
@@ -27,6 +33,12 @@ export default function CondicionesPage() {
     const [datos, setDatos] = useState<Condicion[]>([]);
     const [cargando, setCargando] = useState(false);
     const [guardandoFecha, setGuardandoFecha] = useState<string | null>(null);
+
+    // ── Estado del modal de exportación ───────────────────────────
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [exportMes, setExportMes]   = useState(new Date().getMonth() + 1);  // 1-12
+    const [exportAnio, setExportAnio] = useState(new Date().getFullYear());
+    const [descargando, setDescargando] = useState(false);
 
     const anioMes = format(currentMonth, "yyyy-MM");
 
@@ -75,25 +87,39 @@ export default function CondicionesPage() {
         }
     };
 
-    const exportarExcel = async () => {
+    // ── Descarga el Excel BPA para el mes/año seleccionados ───────
+    const descargarExcelBpa = async () => {
+        setDescargando(true);
         try {
-            const token = localStorage.getItem("sm_token");
-            const res = await fetch(`${api.BASE}/api/condiciones/exportar?mes=${anioMes}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (!res.ok) throw new Error("Error al exportar");
+            const token   = localStorage.getItem("sm_token");
+            const mesStr  = `${exportAnio}-${String(exportMes).padStart(2, "0")}`;
+            const res     = await fetch(
+                `${api.BASE}/api/condiciones/exportar?mes=${mesStr}`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (!res.ok) throw new Error(`Error ${res.status} al generar el Excel`);
+
+            // Obtener nombre del archivo desde el header si está disponible
+            const disposition = res.headers.get("content-disposition") ?? "";
+            const match       = disposition.match(/filename="?([^";\n]+)"?/i);
+            const filename    = match?.[1] ?? `control_ambiental_${mesStr}.xlsx`;
 
             const blob = await res.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `Control_Ambiental_${anioMes}.xlsx`;
+            const url  = window.URL.createObjectURL(blob);
+            const a    = document.createElement("a");
+            a.href     = url;
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
-        } catch (e) {
-            toast("error", "No se pudo exportar el archivo");
+
+            setShowExportModal(false);
+            toast("success", `Excel BPA de ${MESES[exportMes - 1]} ${exportAnio} descargado`);
+        } catch (e: any) {
+            toast("error", e.message ?? "No se pudo generar el Excel");
+        } finally {
+            setDescargando(false);
         }
     };
 
@@ -139,7 +165,116 @@ export default function CondicionesPage() {
     const hoyStr = format(new Date(), "yyyy-MM-dd");
     const faltaHoy = !datos.some(d => d.fecha === hoyStr);
 
+    // ── Años disponibles en el selector (últimos 5 años + próximo) ─
+    const anioActual = new Date().getFullYear();
+    const aniosOpc   = Array.from({ length: 6 }, (_, i) => anioActual - 4 + i);
+
     return (
+        <>
+        {/* ── Modal de exportación Excel BPA ── */}
+        {showExportModal && (
+            <div style={{
+                position: "fixed", inset: 0, zIndex: 1000,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: "rgba(0,0,0,.45)",
+            }}
+                onClick={e => { if (e.target === e.currentTarget) setShowExportModal(false); }}
+            >
+                <div style={{
+                    background: "var(--bg-card)", border: "1px solid var(--border)",
+                    borderRadius: 14, padding: 28, width: 340, boxShadow: "0 8px 32px rgba(0,0,0,.25)",
+                }}>
+                    {/* Cabecera del modal */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <FileSpreadsheet size={20} color="#10b981" />
+                            <span style={{ fontWeight: 700, fontSize: 15, color: "var(--text)" }}>
+                                Exportar Control Ambiental
+                            </span>
+                        </div>
+                        <button
+                            onClick={() => setShowExportModal(false)}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: 4 }}
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+
+                    <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20, lineHeight: 1.5 }}>
+                        Genera la planilla visual BPA con grilla de temperatura (15–35°C)
+                        y humedad (35–75%) lista para imprimir.
+                    </p>
+
+                    {/* Selectores */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+                        <div>
+                            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>
+                                MES
+                            </label>
+                            <select
+                                value={exportMes}
+                                onChange={e => setExportMes(Number(e.target.value))}
+                                style={{
+                                    width: "100%", padding: "8px 10px", borderRadius: 7,
+                                    border: "1px solid var(--border)", background: "var(--bg)",
+                                    color: "var(--text)", fontSize: 13, cursor: "pointer",
+                                }}
+                            >
+                                {MESES.map((m, i) => (
+                                    <option key={i + 1} value={i + 1}>{m}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>
+                                AÑO
+                            </label>
+                            <select
+                                value={exportAnio}
+                                onChange={e => setExportAnio(Number(e.target.value))}
+                                style={{
+                                    width: "100%", padding: "8px 10px", borderRadius: 7,
+                                    border: "1px solid var(--border)", background: "var(--bg)",
+                                    color: "var(--text)", fontSize: 13, cursor: "pointer",
+                                }}
+                            >
+                                {aniosOpc.map(a => (
+                                    <option key={a} value={a}>{a}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Vista previa del período */}
+                    <div style={{
+                        background: "rgba(16,185,129,.07)", border: "1px solid rgba(16,185,129,.2)",
+                        borderRadius: 8, padding: "10px 14px", marginBottom: 20, fontSize: 12,
+                        color: "#10b981", textAlign: "center", fontWeight: 600,
+                    }}>
+                        {MESES[exportMes - 1]} {exportAnio}
+                    </div>
+
+                    {/* Botón descargar */}
+                    <button
+                        onClick={descargarExcelBpa}
+                        disabled={descargando}
+                        style={{
+                            width: "100%", height: 42, borderRadius: 8, border: "none",
+                            background: descargando ? "rgba(16,185,129,.5)" : "#10b981",
+                            color: "#fff", fontWeight: 700, fontSize: 14,
+                            cursor: descargando ? "not-allowed" : "pointer",
+                            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                            transition: "background .15s",
+                        }}
+                    >
+                        {descargando
+                            ? <><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> Generando...</>
+                            : <><Download size={16} /> Descargar Excel</>
+                        }
+                    </button>
+                </div>
+            </div>
+        )}
         <div style={{ maxWidth: 1200, margin: "0 auto", paddingBottom: 60 }}>
             {/* HEADER */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
@@ -169,12 +304,22 @@ export default function CondicionesPage() {
                         </button>
                     </div>
 
-                    <button onClick={exportarExcel} style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        padding: "0 16px", borderRadius: 8, background: "#10b981", color: "#fff",
-                        fontWeight: 600, border: "none", cursor: "pointer", boxShadow: "0 2px 4px rgba(16,185,129,.2)"
-                    }}>
-                        <Download size={16} /> Exportar Excel
+                    <button
+                        onClick={() => {
+                            // Pre-seleccionar el mes que se está viendo
+                            setExportMes(currentMonth.getMonth() + 1);
+                            setExportAnio(currentMonth.getFullYear());
+                            setShowExportModal(true);
+                        }}
+                        style={{
+                            display: "flex", alignItems: "center", gap: 8,
+                            padding: "0 16px", height: 38, borderRadius: 8,
+                            background: "#10b981", color: "#fff",
+                            fontWeight: 600, border: "none", cursor: "pointer",
+                            boxShadow: "0 2px 4px rgba(16,185,129,.2)",
+                        }}
+                    >
+                        <FileSpreadsheet size={16} /> Exportar Excel BPA
                     </button>
                 </div>
             </div>
@@ -316,5 +461,6 @@ export default function CondicionesPage() {
                 </div>
             </div>
         </div>
+        </> // cierre del Fragment que envuelve modal + página
     );
 }

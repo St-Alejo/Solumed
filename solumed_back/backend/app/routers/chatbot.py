@@ -14,7 +14,7 @@ import json
 import asyncio
 import threading
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.core.auth import get_usuario_actual
@@ -38,6 +38,7 @@ router = APIRouter()
 @router.post("/mensaje")
 async def enviar_mensaje(
     body: ChatbotMensajeRequest,
+    request: Request,
     u: dict = Depends(get_usuario_actual),
 ):
     """
@@ -60,6 +61,10 @@ async def enviar_mensaje(
     """
     drogeria_id = u.get("drogeria_id")
     usuario_id  = u.get("id")
+
+    # Extraer el JWT raw para pasarlo a las herramientas agénticas
+    auth_header   = request.headers.get("authorization", "")
+    token_usuario = auth_header[7:] if auth_header.startswith("Bearer ") else ""
 
     # Guardar el mensaje del usuario (ignorar errores para no interrumpir el stream)
     try:
@@ -109,6 +114,7 @@ async def enviar_mensaje(
                     historial=[h.model_dump() for h in body.historial],
                     datos_extra=datos_extra,
                     log_callback=_log,
+                    token_usuario=token_usuario,
                 )
             except Exception as e:
                 _log("error", f"Error en el servicio de IA: {str(e)}")

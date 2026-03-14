@@ -17,6 +17,7 @@ from app.core.database import (
     get_drogeria,
 )
 from app.models.schemas import CondicionAmbientalCreate
+from app.services.excel_condiciones import generar_excel_control_ambiental
 
 router = APIRouter()
 
@@ -75,94 +76,65 @@ def revisar_alertas(u: dict = Depends(get_usuario_actual)):
 @router.get("/exportar")
 def exportar_excel(
     mes: str = Query(..., description="Mes en formato YYYY-MM"),
-    u: dict = Depends(get_usuario_actual)
+    u: dict   = Depends(get_usuario_actual),
 ):
-    """Exporta los datos del mes a un archivo de Excel interactivo."""
-    import openpyxl
-    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-    
+    """
+    Exporta el control ambiental del mes como Excel con formato visual BPA.
+
+    Genera la planilla de grilla físico-digital:
+      - Sección TEMPERATURA (eje X: 15–35°C)
+      - Sección HUMEDAD     (eje X: 35–75%, saltos de 5)
+      - 2 filas por día: M (Mañana/AM) y T (Tarde/PM)
+      - Celda marcada con color según el valor medido
+      - Bordes más gruesos en los límites BPA
+      - Borde rojo en valores fuera de rango
+    """
     drogeria_id = u.get("drogeria_id")
     if not drogeria_id:
         raise HTTPException(400, "Superadmin no puede exportar esto.")
 
-    drog = get_drogeria(drogeria_id)
-    nombre_drogueria = drog["nombre"] if drog else "Droguería"
-
-    condiciones = obtener_condiciones_mes(drogeria_id, mes)
-    
-    # Crear Excel
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = f"Condiciones_{mes}"
-
-    # Estilos
-    bold_font = Font(bold=True)
-    center_align = Alignment(horizontal="center", vertical="center")
-    header_fill = PatternFill(start_color="CCE5FF", end_color="CCE5FF", fill_type="solid")
-    thin_border = Border(
-        left=Side(style='thin'), right=Side(style='thin'),
-        top=Side(style='thin'), bottom=Side(style='thin')
-    )
-
-    # Título superior
-    ws.merge_cells("A1:G1")
-    ws["A1"] = f"CONTROL DE TEMPERATURA Y HUMEDAD - {nombre_drogueria} ({mes})"
-    ws["A1"].font = Font(bold=True, size=14)
-    ws["A1"].alignment = center_align
-
-    # Cabeceras
-    headers = ["Día", "Temp AM (°C)", "Temp PM (°C)", "Hum AM (%)", "Hum PM (%)", "Firma AM", "Firma PM"]
-    for col_num, header in enumerate(headers, 1):
-        cell = ws.cell(row=3, column=col_num, value=header)
-        cell.font = bold_font
-        cell.alignment = center_align
-        cell.fill = header_fill
-        cell.border = thin_border
-        ws.column_dimensions[openpyxl.utils.get_column_letter(col_num)].width = 15
-
-    # Llenar datos (1 al 31)
+    # Parsear mes formato YYYY-MM
     try:
-        anio, mm = map(int, mes.split("-"))
-        _, dias_mes = calendar.monthrange(anio, mm)
+        anio_str, mm_str = mes.split("-")
+        anio = int(anio_str)
+        mm   = int(mm_str)
+        if not (1 <= mm <= 12):
+            raise ValueError
     except Exception:
-        dias_mes = 31
+        raise HTTPException(400, "El parámetro 'mes' debe tener formato YYYY-MM (ej: 2026-03)")
 
-    # Crear diccionario de acceso rápido
-    datos_dict = {c["fecha"]: c for c in condiciones}
+    # Datos de la droguería y del usuario
+    drog             = get_drogeria(drogeria_id)
+    nombre_drogueria = drog["nombre"] if drog else "Droguería"
+    responsable      = u.get("nombre", "")
 
-    fila = 4
-    for dia in range(1, dias_mes + 1):
-        fecha_str = f"{anio}-{mm:02d}-{dia:02d}"
-        c = datos_dict.get(fecha_str, {})
-        
-        row_data = [
-            dia,
-            c.get("temperatura_am", ""),
-            c.get("temperatura_pm", ""),
-            c.get("humedad_am", ""),
-            c.get("humedad_pm", ""),
-            c.get("firma_am", ""),
-            c.get("firma_pm", "")
-        ]
-        
-        for col_num, value in enumerate(row_data, 1):
-            cell = ws.cell(row=fila, column=col_num, value=value)
-            cell.alignment = center_align
-            cell.border = thin_border
-        fila += 1
+    # Registros del mes desde la BD
+    condiciones = obtener_condiciones_mes(drogeria_id, mes)
 
-    # Generar archivo en memoria
-    stream = io.BytesIO()
-    wb.save(stream)
-    stream.seek(0)
-    
-    filename = f"Control_Ambiental_{nombre_drogueria}_{mes}.xlsx"
-    headers = {
-        'Content-Disposition': f'attachment; filename="{filename}"'
+    # Generar Excel con el servicio dedicado
+    try:
+        buf = generar_excel_control_ambiental(
+            registros        = condiciones,
+            mes              = mm,
+            anio             = anio,
+            nombre_drogueria = nombre_drogueria,
+            responsable      = responsable,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Error generando el Excel: {e}")
+
+    # Nombre del archivo: control_ambiental_DROGUERIA_MARZO_2026.xlsx
+    MESES_ES = {
+        1: "ENERO",    2: "FEBRERO", 3: "MARZO",     4: "ABRIL",
+        5: "MAYO",     6: "JUNIO",   7: "JULIO",     8: "AGOSTO",
+        9: "SEPTIEMBRE", 10: "OCTUBRE", 11: "NOVIEMBRE", 12: "DICIEMBRE",
     }
-    
+    nombre_mes  = MESES_ES.get(mm, str(mm))
+    nombre_safe = nombre_drogueria.upper().replace(" ", "_").replace("/", "-")
+    filename    = f"control_ambiental_{nombre_safe}_{nombre_mes}_{anio}.xlsx"
+
     return StreamingResponse(
-        stream, 
+        buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers=headers
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
