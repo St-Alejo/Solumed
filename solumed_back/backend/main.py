@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from app.core.config import settings
 from app.core.database import inicializar
 
-from app.routers import auth, admin, facturas, invima, historial, usuarios, condiciones, distribuidores, alarmas, credito, extractor_gmail, chatbot
+from app.routers import auth, admin, facturas, invima, historial, usuarios, condiciones, distribuidores, alarmas, credito, extractor_gmail, chatbot, alertas_sanitarias
 
 # ── Aplicación FastAPI ────────────────────────────────────────
 app = FastAPI(
@@ -118,7 +118,8 @@ app.include_router(condiciones.router,   prefix="/api/condiciones",   tags=["�
 app.include_router(alarmas.router,       prefix="/api/alarmas",       tags=["🔔 Alarmas"])
 app.include_router(credito.router,         prefix="/api/credito",         tags=["💳 Crédito"])
 app.include_router(extractor_gmail.router, prefix="/api/extractor-gmail", tags=["📧 Extractor Gmail"])
-app.include_router(chatbot.router,         prefix="/api/chatbot",         tags=["🤖 Chatbot IA"])
+app.include_router(chatbot.router,           prefix="/api/chatbot",           tags=["🤖 Chatbot IA"])
+app.include_router(alertas_sanitarias.router, prefix="/api/alertas-sanitarias", tags=["🛡️ Alertas Sanitarias"])
 
 
 # ── Eventos ───────────────────────────────────────────────────
@@ -133,6 +134,13 @@ async def on_startup():
             _crear_bucket_si_no_existe()
         except Exception as e:
             print(f"[WARN] Storage: {e}")
+
+    # Inicializar scheduler de alertas sanitarias (lunes 7AM)
+    try:
+        from app.services.scraper_alertas import iniciar_scheduler
+        iniciar_scheduler()
+    except Exception as e:
+        print(f"[WARN] Scheduler alertas: {e}")
 
     modo_bd      = "PostgreSQL/Supabase"
     modo_storage = "Supabase Storage" if settings.usar_supabase_storage else "Disco local"

@@ -7,7 +7,7 @@ import {
   FlaskConical, ClipboardCheck, History, Search,
   FileText, Users, LogOut, ChevronRight, X, Menu,
   Building2, Key, AlertTriangle, Sun, Moon,
-  Thermometer, Bell, CreditCard, Mail
+  Thermometer, Bell, CreditCard, Mail, ShieldAlert
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { diasHasta } from "@/lib/utils";
@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { href: "/reportes", label: "Reportes", icon: FileText, desc: "PDFs generados" },
   { href: "/usuarios", label: "Usuarios", icon: Users, desc: "Gestionar equipo" },
   { href: "/extractor-gmail", label: "Extractor Gmail", icon: Mail, desc: "Facturas desde correo" },
+  { href: "/alertas-sanitarias", label: "Alertas Sanitarias", icon: ShieldAlert, desc: "Alertas INVIMA semanales" },
   { href: "/perfil", label: "Mi Cuenta", icon: Key, desc: "Contraseña y perfil" },
 ];
 
@@ -34,6 +35,7 @@ export default function Sidebar() {
   const [abierto, setAbierto] = useState(false);
   const [faltaRegistro, setFaltaRegistro] = useState(false);
   const [alarmasUrgentes, setAlarmasUrgentes] = useState(0);
+  const [alertasSanitariasNuevas, setAlertasSanitariasNuevas] = useState(0);
 
   // Consultar alerta de condiciones hoy
   useEffect(() => {
@@ -57,6 +59,24 @@ export default function Sidebar() {
       } catch (e) { }
     };
     revisarAlarmas();
+  }, [usuario, pathname]);
+
+  // Consultar alertas sanitarias nuevas (badge)
+  useEffect(() => {
+    if (!usuario || usuario.rol === "superadmin") return;
+    // Limpiar badge si el usuario está en la sección
+    if (pathname.startsWith("/alertas-sanitarias")) {
+      api.alertasSanitarias.marcarVistas().catch(() => {});
+      setAlertasSanitariasNuevas(0);
+      return;
+    }
+    const revisar = async () => {
+      try {
+        const data = await api.alertasSanitarias.conteoNuevas();
+        if (data.ok) setAlertasSanitariasNuevas(data.nuevas ?? 0);
+      } catch (e) { }
+    };
+    revisar();
   }, [usuario, pathname]);
 
   // Cerrar al navegar
@@ -170,6 +190,16 @@ export default function Sidebar() {
                       padding: "0 4px",
                     }}>
                       {alarmasUrgentes > 99 ? "99+" : alarmasUrgentes}
+                    </div>
+                  )}
+                  {item.href === "/alertas-sanitarias" && alertasSanitariasNuevas > 0 && (
+                    <div style={{
+                      minWidth: 18, height: 18, borderRadius: 9, background: "#ef4444",
+                      color: "#fff", fontSize: 10, fontWeight: 700, flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      padding: "0 4px",
+                    }}>
+                      {alertasSanitariasNuevas > 99 ? "99+" : alertasSanitariasNuevas}
                     </div>
                   )}
                 </div>

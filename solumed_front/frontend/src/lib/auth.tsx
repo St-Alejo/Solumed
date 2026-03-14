@@ -347,6 +347,26 @@ export function useApi() {
       eliminarPago: (facturaId: number, pagoId: number) =>
         apiFetch(`/api/credito/${facturaId}/pagos/${pagoId}`, { method: "DELETE" }),
     },
+
+    alertasSanitarias: {
+      listar: (params?: { anio?: number; mes?: string; busqueda?: string; pagina?: number; limite?: number }) => {
+        const qs = new URLSearchParams();
+        if (params?.anio) qs.set("anio", String(params.anio));
+        if (params?.mes) qs.set("mes", params.mes);
+        if (params?.busqueda) qs.set("busqueda", params.busqueda);
+        if (params?.pagina) qs.set("pagina", String(params.pagina));
+        if (params?.limite) qs.set("limite", String(params.limite));
+        const q = qs.toString();
+        return apiFetch(`/api/alertas-sanitarias${q ? "?" + q : ""}`);
+      },
+      recientes: (limite = 5) => apiFetch(`/api/alertas-sanitarias/recientes?limite=${limite}`),
+      estadoSync: () => apiFetch("/api/alertas-sanitarias/estado-sync"),
+      anios: () => apiFetch("/api/alertas-sanitarias/anios"),
+      conteoNuevas: () => apiFetch("/api/alertas-sanitarias/conteo-nuevas"),
+      marcarVistas: () => apiFetch("/api/alertas-sanitarias/marcar-vistas", { method: "POST" }),
+      sincronizar: () => apiFetch("/api/alertas-sanitarias/sincronizar", { method: "POST" }),
+      pdfUrl: (id: string) => `${API}/api/alertas-sanitarias/${id}/pdf`,
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [apiFetch, apiForm, token]); // token solo para descargarUrl que lo usa directamente
 }

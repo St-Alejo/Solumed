@@ -414,6 +414,9 @@ def inicializar():
             )
             print("✅ Superadmin creado → admin@solumed.co | Admin2026!")
 
+        # ── alertas_sanitarias ────────────────────────────────
+        inicializar_alertas_sanitarias(cur)
+
     finally:
         cur.close()
         con.close()
@@ -1193,3 +1196,206 @@ def listar_conversacion_chatbot(
         (session_id, drogeria_id, limite),
     )
     return list(reversed(filas))  # Orden cronológico ascendente
+
+
+# ══════════════════════════════════════════════════════════════
+#  ALERTAS SANITARIAS
+# ══════════════════════════════════════════════════════════════
+
+def inicializar_alertas_sanitarias(cur):
+    """Crea la tabla alertas_sanitarias si no existe. Se llama desde inicializar()."""
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS alertas_sanitarias (
+            id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            titulo           TEXT NOT NULL,
+            semana           TEXT NOT NULL,
+            mes              TEXT NOT NULL,
+            anio             INTEGER NOT NULL,
+            url_original     TEXT NOT NULL,
+            url_storage      TEXT,
+            fecha_aproximada DATE,
+            fecha_extraccion TIMESTAMPTZ DEFAULT NOW(),
+            es_nueva         BOOLEAN DEFAULT TRUE,
+            created_at       TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(titulo, anio)
+        )
+    """)
+    # Índices para búsqueda eficiente
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_alertas_anio_mes
+        ON alertas_sanitarias(anio DESC, mes)
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_alertas_es_nueva
+        ON alertas_sanitarias(es_nueva) WHERE es_nueva = TRUE
+    """)
+    # Tabla para guardar el estado de la última sincronización
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS alertas_sync_log (
+            id           SERIAL PRIMARY KEY,
+            ejecutado_en TIMESTAMPTZ DEFAULT NOW(),
+            nuevas       INTEGER DEFAULT 0,
+            omitidas     INTEGER DEFAULT 0,
+            errores      INTEGER DEFAULT 0,
+            tiempo_ms    INTEGER DEFAULT 0,
+            ok           BOOLEAN DEFAULT TRUE,
+            detalle      TEXT DEFAULT ''
+        )
+    """)
+
+
+def existe_alerta_sanitaria(titulo: str, anio: int) -> bool:
+    """Verifica si ya existe una alerta con ese título y año (evitar duplicados)."""
+    fila = _fetch_one(
+        "SELECT id FROM alertas_sanitarias WHERE titulo=%s AND anio=%s",
+        (titulo, anio)
+    )
+    return fila is not None
+
+
+def crear_alerta_sanitaria(
+    titulo: str,
+    semana: str,
+    mes: str,
+    anio: int,
+    url_original: str,
+    url_storage: Optional[str],
+    fecha_aproximada: Optional[date],
+) -> str:
+    """
+    Inserta una nueva alerta sanitaria.
+    Retorna el UUID asignado.
+    Ignora conflictos (ON CONFLICT DO NOTHING) para seguridad extra.
+    """
+    fila = _fetch_one("""
+        INSERT INTO alertas_sanitarias
+            (titulo, semana, mes, anio, url_original, url_storage, fecha_aproximada)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (titulo, anio) DO NOTHING
+        RETURNING id::text
+    """, (titulo, semana, mes, anio, url_original, url_storage, fecha_aproximada))
+    return fila["id"] if fila else None
+
+
+def listar_alertas_sanitarias(
+    anio: Optional[int] = None,
+    mes: Optional[str] = None,
+    busqueda: Optional[str] = None,
+    pagina: int = 1,
+    limite: int = 20,
+) -> dict:
+    """
+    Lista alertas con filtros opcionales.
+    Retorna { total, alertas: [...] }.
+    """
+    condiciones = []
+    params: list = []
+
+    if anio:
+        condiciones.append("anio = %s")
+        params.append(anio)
+    if mes:
+        condiciones.append("UPPER(mes) = UPPER(%s)")
+        params.append(mes)
+    if busqueda:
+        condiciones.append("titulo ILIKE %s")
+        params.append(f"%{busqueda}%")
+
+    where = ("WHERE " + " AND ".join(condiciones)) if condiciones else ""
+    offset = (pagina - 1) * limite
+
+    total_fila = _fetch_one(
+        f"SELECT COUNT(*) AS total FROM alertas_sanitarias {where}",
+        tuple(params)
+    )
+    total = total_fila["total"] if total_fila else 0
+
+    alertas = _fetch_all(
+        f"""
+        SELECT id::text, titulo, semana, mes, anio,
+               url_original, url_storage,
+               fecha_aproximada::text,
+               fecha_extraccion::text,
+               es_nueva, created_at::text
+        FROM alertas_sanitarias
+        {where}
+        ORDER BY anio DESC, fecha_aproximada DESC NULLS LAST
+        LIMIT %s OFFSET %s
+        """,
+        tuple(params) + (limite, offset)
+    )
+    return {"total": total, "alertas": alertas}
+
+
+def alertas_sanitarias_recientes(limite: int = 5) -> list[dict]:
+    """Retorna las N alertas más recientes (para widget en dashboard)."""
+    return _fetch_all("""
+        SELECT id::text, titulo, semana, mes, anio,
+               url_original, url_storage,
+               fecha_aproximada::text,
+               es_nueva
+        FROM alertas_sanitarias
+        ORDER BY anio DESC, fecha_aproximada DESC NULLS LAST
+        LIMIT %s
+    """, (limite,))
+
+
+def contar_alertas_nuevas() -> int:
+    """Cuenta alertas con es_nueva=TRUE (para badge en sidebar)."""
+    fila = _fetch_one(
+        "SELECT COUNT(*) AS total FROM alertas_sanitarias WHERE es_nueva = TRUE"
+    )
+    return fila["total"] if fila else 0
+
+
+def marcar_alertas_vistas():
+    """Marca todas las alertas como no nuevas (llamar cuando el usuario visita la sección)."""
+    _execute("UPDATE alertas_sanitarias SET es_nueva = FALSE WHERE es_nueva = TRUE")
+
+
+def get_alerta_sanitaria(alerta_id: str) -> Optional[dict]:
+    """Obtiene una alerta por UUID."""
+    return _fetch_one("""
+        SELECT id::text, titulo, semana, mes, anio,
+               url_original, url_storage,
+               fecha_aproximada::text,
+               fecha_extraccion::text,
+               es_nueva
+        FROM alertas_sanitarias
+        WHERE id = %s::uuid
+    """, (alerta_id,))
+
+
+def anios_disponibles_alertas() -> list[int]:
+    """Retorna todos los años que tienen alertas registradas."""
+    filas = _fetch_all(
+        "SELECT DISTINCT anio FROM alertas_sanitarias ORDER BY anio DESC"
+    )
+    return [f["anio"] for f in filas]
+
+
+def guardar_sync_log(
+    nuevas: int,
+    omitidas: int,
+    errores: int,
+    tiempo_ms: int,
+    ok: bool,
+    detalle: str = "",
+):
+    """Registra el resultado de una ejecución del scraper."""
+    _execute("""
+        INSERT INTO alertas_sync_log
+            (nuevas, omitidas, errores, tiempo_ms, ok, detalle)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (nuevas, omitidas, errores, tiempo_ms, ok, detalle))
+
+
+def ultimo_sync_log() -> Optional[dict]:
+    """Retorna el log de la última sincronización."""
+    return _fetch_one("""
+        SELECT nuevas, omitidas, errores, tiempo_ms, ok,
+               ejecutado_en::text, detalle
+        FROM alertas_sync_log
+        ORDER BY ejecutado_en DESC
+        LIMIT 1
+    """)

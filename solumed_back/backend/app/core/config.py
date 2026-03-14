@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # ── Anthropic Claude ───────────────────────────────────────
     ANTHROPIC_API_KEY: str = ""
 
+    # ── Alertas Sanitarias ─────────────────────────────────────
+    # Clave interna para proteger el endpoint POST /sincronizar
+    INTERNAL_API_KEY: str = "cambiar_en_produccion_openssl_rand_hex_32"
+    # Bucket de Supabase para los PDFs de alertas sanitarias
+    ALERTAS_BUCKET: str = "alertas-sanitarias"
+
     # ── Socrata INVIMA ─────────────────────────────────────────
     SOCRATA_APP_TOKEN: str = ""
 
