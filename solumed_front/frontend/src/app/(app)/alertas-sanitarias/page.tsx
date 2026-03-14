@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useApi } from "@/lib/auth";
 import { useToast } from "@/components/ui/Toast";
 import {
-  ShieldAlert, Download, RefreshCw,
+  ShieldAlert, Download,
   CheckCircle, X, Search, Calendar, Loader2,
   ExternalLink, ChevronLeft, ChevronRight,
 } from "lucide-react";
@@ -54,8 +54,7 @@ function formatFechaCorta(fechaStr: string | null): string {
 function esMenorDe7Dias(fechaStr: string | null): boolean {
   if (!fechaStr) return false;
   const fecha = new Date(fechaStr);
-  const diff = Date.now() - fecha.getTime();
-  return diff < 7 * 24 * 60 * 60 * 1000;
+  return Date.now() - fecha.getTime() < 7 * 24 * 60 * 60 * 1000;
 }
 
 function formatProximaSync(isoStr: string): string {
@@ -68,14 +67,11 @@ export default function AlertasSanitariasPage() {
   const api = useApi();
   const { toast } = useToast();
 
-  // Estado principal
   const [alertas, setAlertas] = useState<AlertaSanitaria[]>([]);
   const [total, setTotal] = useState(0);
   const [cargando, setCargando] = useState(true);
-  const [sincronizando, setSincronizando] = useState(false);
   const [estadoSync, setEstadoSync] = useState<EstadoSync | null>(null);
   const [aniosDisponibles, setAniosDisponibles] = useState<number[]>([]);
-  const [sincHaceEspera, setSincHaceEspera] = useState(false);
 
   // Filtros
   const [filtroAnio, setFiltroAnio] = useState<string>("");
@@ -84,7 +80,7 @@ export default function AlertasSanitariasPage() {
   const [pagina, setPagina] = useState(1);
   const LIMITE = 20;
 
-  // ─── Cargar alertas ─────────────────────────────────────────
+  // ─── Cargar alertas desde Supabase ───────────────────────────
   const cargarAlertas = useCallback(async (resetPagina = false) => {
     setCargando(true);
     const paginaActual = resetPagina ? 1 : pagina;
@@ -102,14 +98,14 @@ export default function AlertasSanitariasPage() {
         setAlertas(data.datos);
         setTotal(data.total);
       }
-    } catch (e) {
+    } catch {
       toast("error", "No se pudieron cargar las alertas");
     } finally {
       setCargando(false);
     }
   }, [filtroAnio, filtroMes, filtroBusqueda, pagina]);
 
-  // ─── Cargar estado de sync y años ───────────────────────────
+  // ─── Cargar metadatos (estado sync + años disponibles) ───────
   const cargarMetadatos = useCallback(async () => {
     try {
       const [syncData, aniosData] = await Promise.all([
@@ -118,80 +114,20 @@ export default function AlertasSanitariasPage() {
       ]);
       if (syncData.ok) setEstadoSync(syncData);
       if (aniosData.ok) setAniosDisponibles(aniosData.datos);
-    } catch (e) { /* silencioso */ }
+    } catch { /* silencioso */ }
   }, []);
-
-  // ─── Verificar si hay alertas nuevas al entrar ──────────────
-  const verificarNuevasEnBackground = useCallback(async (syncInfo: EstadoSync | null) => {
-    if (!syncInfo) return;
-
-    // Si la última sync fue hace más de 7 días o nunca se hizo
-    const necesitaSync = !syncInfo.ultima_sync || (() => {
-      const diff = Date.now() - new Date(syncInfo.ultima_sync!).getTime();
-      return diff > 7 * 24 * 60 * 60 * 1000;
-    })();
-
-    if (necesitaSync) {
-      setSincHaceEspera(true);
-      try {
-        await api.alertasSanitarias.sincronizar();
-        await cargarAlertas();
-        await cargarMetadatos();
-      } catch (e) { /* silencioso */ } finally {
-        setSincHaceEspera(false);
-      }
-    }
-  }, [cargarAlertas, cargarMetadatos]);
 
   // ─── Efecto inicial ─────────────────────────────────────────
   useEffect(() => {
-    // Marcar alertas como vistas (limpia badge)
+    // Marcar alertas como vistas al entrar (limpia badge del sidebar)
     api.alertasSanitarias.marcarVistas().catch(() => {});
-
-    const inicializar = async () => {
-      await cargarMetadatos();
-      await cargarAlertas();
-    };
-    inicializar();
+    cargarMetadatos();
+    cargarAlertas();
   }, []);
 
-  // Verificar en background después de cargar metadatos
-  useEffect(() => {
-    if (estadoSync !== null) {
-      verificarNuevasEnBackground(estadoSync);
-    }
-  }, [estadoSync?.ultima_sync]);
-
   // Recargar cuando cambian filtros
-  useEffect(() => {
-    cargarAlertas(true);
-  }, [filtroAnio, filtroMes, filtroBusqueda]);
-
-  useEffect(() => {
-    cargarAlertas();
-  }, [pagina]);
-
-  // ─── Sincronizar manualmente ─────────────────────────────────
-  const sincronizarManual = async () => {
-    setSincronizando(true);
-    try {
-      const data = await api.alertasSanitarias.sincronizar();
-      if (data.ok) {
-        toast(
-          "success",
-          data.en_proceso
-            ? "Sincronización iniciada en segundo plano"
-            : `Sincronización completada: ${data.nuevas} nuevas, ${data.omitidas} omitidas`
-        );
-        await cargarAlertas(true);
-        await cargarMetadatos();
-      }
-    } catch (e: any) {
-      toast("error", e.message ?? "Error al sincronizar");
-    } finally {
-      setSincronizando(false);
-    }
-  };
+  useEffect(() => { cargarAlertas(true); }, [filtroAnio, filtroMes, filtroBusqueda]);
+  useEffect(() => { cargarAlertas(); }, [pagina]);
 
   // ─── Descargar PDF ───────────────────────────────────────────
   const descargarPdf = (alerta: AlertaSanitaria) => {
@@ -199,7 +135,6 @@ export default function AlertasSanitariasPage() {
     window.open(url, "_blank", "noopener");
   };
 
-  // ─── Limpiar filtros ─────────────────────────────────────────
   const limpiarFiltros = () => {
     setFiltroAnio("");
     setFiltroMes("");
@@ -209,7 +144,7 @@ export default function AlertasSanitariasPage() {
   const hayFiltros = filtroAnio || filtroMes || filtroBusqueda;
   const totalPaginas = Math.max(1, Math.ceil(total / LIMITE));
 
-  // ─── Agrupar alertas por año ─────────────────────────────────
+  // Agrupar por año
   const alertasPorAnio: Record<number, AlertaSanitaria[]> = {};
   for (const a of alertas) {
     if (!alertasPorAnio[a.anio]) alertasPorAnio[a.anio] = [];
@@ -223,38 +158,15 @@ export default function AlertasSanitariasPage() {
 
       {/* ── Encabezado ── */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-              <ShieldAlert size={22} color="#f59e0b" />
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
-                Alertas Sanitarias
-              </h1>
-            </div>
-            <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
-              Actualizadas automáticamente desde FarmaComCiencia · Cada lunes a las 7:00 AM
-            </p>
-          </div>
-
-          {/* Botón sincronizar */}
-          <button
-            onClick={sincronizarManual}
-            disabled={sincronizando}
-            style={{
-              display: "flex", alignItems: "center", gap: 7,
-              padding: "9px 16px", borderRadius: 8, cursor: sincronizando ? "not-allowed" : "pointer",
-              background: sincronizando ? "rgba(255,255,255,.05)" : "rgba(245,158,11,.12)",
-              border: `1px solid ${sincronizando ? "rgba(255,255,255,.1)" : "rgba(245,158,11,.3)"}`,
-              color: sincronizando ? "#64748b" : "#f59e0b",
-              fontSize: 13, fontWeight: 600,
-            }}
-          >
-            {sincronizando
-              ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Sincronizando...</>
-              : <><RefreshCw size={14} /> Sincronizar ahora</>
-            }
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+          <ShieldAlert size={22} color="#f59e0b" />
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
+            Alertas Sanitarias
+          </h1>
         </div>
+        <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
+          Actualizadas automáticamente desde FarmaComCiencia · Cada lunes a las 7:00 AM
+        </p>
 
         {/* Badges de estado */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 14 }}>
@@ -293,20 +205,6 @@ export default function AlertasSanitariasPage() {
           )}
         </div>
       </div>
-
-      {/* ── Banner de sincronización en background ── */}
-      {sincHaceEspera && (
-        <div style={{
-          display: "flex", alignItems: "center", gap: 10,
-          padding: "12px 16px", borderRadius: 8, marginBottom: 20,
-          background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.2)",
-        }}>
-          <Loader2 size={15} color="#f59e0b" style={{ animation: "spin 1s linear infinite" }} />
-          <p style={{ margin: 0, fontSize: 13, color: "#f59e0b" }}>
-            Verificando si hay nuevas alertas disponibles...
-          </p>
-        </div>
-      )}
 
       {/* ── Filtros ── */}
       <div style={{
@@ -361,7 +259,6 @@ export default function AlertasSanitariasPage() {
           ))}
         </select>
 
-        {/* Limpiar filtros */}
         {hayFiltros && (
           <button
             onClick={limpiarFiltros}
@@ -383,31 +280,24 @@ export default function AlertasSanitariasPage() {
           <Loader2 size={28} color="#f59e0b" style={{ animation: "spin 1s linear infinite" }} />
         </div>
       ) : alertas.length === 0 ? (
-        <div style={{
-          textAlign: "center", padding: "60px 24px",
-          color: "#64748b", fontSize: 14,
-        }}>
+        <div style={{ textAlign: "center", padding: "60px 24px", color: "#64748b", fontSize: 14 }}>
           <ShieldAlert size={40} color="#334155" style={{ marginBottom: 12 }} />
           <p style={{ margin: 0, fontWeight: 600 }}>
             {hayFiltros ? "No hay alertas con esos filtros" : "Aún no hay alertas descargadas"}
           </p>
-          <p style={{ margin: "6px 0 0", fontSize: 13 }}>
-            {!hayFiltros && "Usa el botón «Sincronizar ahora» para obtener las alertas más recientes."}
-          </p>
+          {!hayFiltros && (
+            <p style={{ margin: "6px 0 0", fontSize: 13 }}>
+              El sistema descarga las alertas automáticamente cada lunes a las 7:00 AM.
+            </p>
+          )}
         </div>
       ) : (
         <>
-          {/* Alertas agrupadas por año */}
           {aniosEnLista.map(anio => (
             <div key={anio} style={{ marginBottom: 32 }}>
               {/* Separador de año */}
-              <div style={{
-                display: "flex", alignItems: "center", gap: 12, marginBottom: 14,
-              }}>
-                <span style={{
-                  fontSize: 18, fontWeight: 800, color: "#f59e0b",
-                  letterSpacing: "-.01em",
-                }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                <span style={{ fontSize: 18, fontWeight: 800, color: "#f59e0b", letterSpacing: "-.01em" }}>
                   {anio}
                 </span>
                 <div style={{ flex: 1, height: 1, background: "rgba(245,158,11,.2)" }} />
@@ -416,7 +306,6 @@ export default function AlertasSanitariasPage() {
                 </span>
               </div>
 
-              {/* Cards de alertas del año */}
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {alertasPorAnio[anio].map(alerta => (
                   <AlertaCard key={alerta.id} alerta={alerta} onDescargar={descargarPdf} />
@@ -440,9 +329,7 @@ export default function AlertasSanitariasPage() {
               >
                 <ChevronLeft size={14} /> Anterior
               </button>
-              <span style={{ fontSize: 13, color: "#64748b" }}>
-                Página {pagina} de {totalPaginas}
-              </span>
+              <span style={{ fontSize: 13, color: "#64748b" }}>Página {pagina} de {totalPaginas}</span>
               <button
                 onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
                 disabled={pagina === totalPaginas}
@@ -460,18 +347,14 @@ export default function AlertasSanitariasPage() {
         </>
       )}
 
-      {/* Estilo para animación de spin */}
       <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
     </div>
   );
 }
 
-// ─── Componente AlertaCard ────────────────────────────────────
+// ─── AlertaCard ───────────────────────────────────────────────
 function AlertaCard({
   alerta,
   onDescargar,
@@ -487,9 +370,7 @@ function AlertaCard({
       display: "flex", alignItems: "center", justifyContent: "space-between",
       gap: 16, padding: "14px 18px", borderRadius: 10,
       background: "var(--bg-card)", border: "1px solid var(--border)",
-      transition: "border-color .15s",
     }}>
-      {/* Contenido izquierdo */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           {esMostrarNueva && (
@@ -502,9 +383,8 @@ function AlertaCard({
             </span>
           )}
           <p style={{
-            margin: 0, fontSize: 14, fontWeight: 700,
-            color: "var(--text)", lineHeight: 1.3,
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            margin: 0, fontSize: 14, fontWeight: 700, color: "var(--text)",
+            lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>
             {alerta.titulo}
           </p>
@@ -516,17 +396,13 @@ function AlertaCard({
             </span>
           )}
           {alerta.fecha_aproximada && (
-            <span style={{
-              fontSize: 12, color: "#475569",
-              borderLeft: "1px solid #1e293b", paddingLeft: 12,
-            }}>
+            <span style={{ fontSize: 12, color: "#475569", borderLeft: "1px solid #1e293b", paddingLeft: 12 }}>
               {formatFechaLarga(alerta.fecha_aproximada)}
             </span>
           )}
         </div>
       </div>
 
-      {/* Botón descargar */}
       {tienePdf && (
         <button
           onClick={() => onDescargar(alerta)}
@@ -536,7 +412,6 @@ function AlertaCard({
             padding: "9px 16px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
             background: "rgba(245,158,11,.15)", border: "1px solid rgba(245,158,11,.35)",
             color: "#f59e0b", fontSize: 13, fontWeight: 700,
-            transition: "background-color .15s",
           }}
         >
           {alerta.url_storage

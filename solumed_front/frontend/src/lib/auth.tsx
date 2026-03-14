@@ -364,7 +364,6 @@ export function useApi() {
       anios: () => apiFetch("/api/alertas-sanitarias/anios"),
       conteoNuevas: () => apiFetch("/api/alertas-sanitarias/conteo-nuevas"),
       marcarVistas: () => apiFetch("/api/alertas-sanitarias/marcar-vistas", { method: "POST" }),
-      sincronizar: () => apiFetch("/api/alertas-sanitarias/sincronizar", { method: "POST" }),
       pdfUrl: (id: string) => `${API}/api/alertas-sanitarias/${id}/pdf`,
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
